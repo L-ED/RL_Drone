@@ -35,7 +35,7 @@ class BaseAviary(gym.Env):
                  record=False,
                  obstacles=False,
                  user_debug_gui=True,
-                 vision_attributes=False,
+                 vision_attributes=True,
                  output_folder='results'
                  ):
         """Initialization of a generic aviary environment.
@@ -132,7 +132,7 @@ class BaseAviary(gym.Env):
             os.makedirs(os.path.dirname(self.ONBOARD_IMG_PATH), exist_ok=True)
         self.VISION_ATTR = vision_attributes
         if self.VISION_ATTR:
-            self.IMG_RES = np.array([64, 48])
+            self.IMG_RES = np.array([160, 120])
             self.IMG_FRAME_PER_SEC = 24
             self.IMG_CAPTURE_FREQ = int(self.PYB_FREQ/self.IMG_FRAME_PER_SEC)
             self.rgb = np.zeros(((self.NUM_DRONES, self.IMG_RES[1], self.IMG_RES[0], 4)))
@@ -148,17 +148,17 @@ class BaseAviary(gym.Env):
         if self.GUI:
             #### With debug GUI ########################################
             self.CLIENT = p.connect(p.GUI) # p.connect(p.GUI, options="--opengl2")
-            for i in [p.COV_ENABLE_RGB_BUFFER_PREVIEW, p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW]:
-                p.configureDebugVisualizer(i, 0, physicsClientId=self.CLIENT)
-            p.resetDebugVisualizerCamera(cameraDistance=3,
-                                         cameraYaw=-30,
-                                         cameraPitch=-30,
-                                         cameraTargetPosition=[0, 0, 0],
-                                         physicsClientId=self.CLIENT
-                                         )
-            ret = p.getDebugVisualizerCamera(physicsClientId=self.CLIENT)
-            print("viewMatrix", ret[2])
-            print("projectionMatrix", ret[3])
+            # for i in [p.COV_ENABLE_RGB_BUFFER_PREVIEW, p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW]:
+            #     p.configureDebugVisualizer(i, 0, physicsClientId=self.CLIENT)
+            # p.resetDebugVisualizerCamera(cameraDistance=3,
+            #                              cameraYaw=-30,
+            #                              cameraPitch=-30,
+            #                              cameraTargetPosition=[0, 0, 0],
+            #                              physicsClientId=self.CLIENT
+            #                              )
+            # ret = p.getDebugVisualizerCamera(physicsClientId=self.CLIENT)
+            # print("viewMatrix", ret[2])
+            # print("projectionMatrix", ret[3])
             if self.USER_DEBUG:
                 #### Add input sliders to the GUI ##########################
                 self.SLIDERS = -1*np.ones(4)
@@ -519,7 +519,7 @@ class BaseAviary(gym.Env):
             self.pos[i], self.quat[i] = p.getBasePositionAndOrientation(self.DRONE_IDS[i], physicsClientId=self.CLIENT)
             self.rpy[i] = p.getEulerFromQuaternion(self.quat[i])
             self.vel[i], self.ang_v[i] = p.getBaseVelocity(self.DRONE_IDS[i], physicsClientId=self.CLIENT)
-    
+
     ################################################################################
 
     def _startVideoRecording(self):
@@ -978,17 +978,17 @@ class BaseAviary(gym.Env):
 
         These obstacles are loaded from standard URDF files included in Bullet.
 
-        """
-        p.loadURDF("samurai.urdf",
-                   physicsClientId=self.CLIENT
-                   )
+        # """
+        # p.loadURDF("samurai.urdf",
+        #            physicsClientId=self.CLIENT
+        #            )
         p.loadURDF("duck_vhacd.urdf",
                    [-.5, -.5, .05],
                    p.getQuaternionFromEuler([0, 0, 0]),
                    physicsClientId=self.CLIENT
                    )
         p.loadURDF("cube_no_rotation.urdf",
-                   [-.5, -2.5, .5],
+                   [10.5, -2.5, .5],
                    p.getQuaternionFromEuler([0, 0, 0]),
                    physicsClientId=self.CLIENT
                    )
