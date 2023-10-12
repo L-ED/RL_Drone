@@ -72,7 +72,7 @@ class HoverAviary(BaseSingleAgentAviary):
 
         """
         state = self._getDroneStateVector(0)
-        return -1 * np.linalg.norm(np.array([0, 0, 1])-state[0:3])**2
+        return -100 * np.linalg.norm(np.array([0, 0, 1])-state[0:3])**2 - 100*np.linalg.norm(np.abs(state[7:10])) - 100*np.linalg.norm(np.abs(state[10:13]))*self.EPISODE_LEN_SEC - 100*np.linalg.norm(np.abs(state[13:16]))*self.EPISODE_LEN_SEC
 
     ################################################################################
     

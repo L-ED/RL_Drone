@@ -106,16 +106,16 @@ class IMUAviary(BaseAviary):
             The observation space, i.e., and ndarray of shape (NUM_DRONES, 20).
 
         """
-        #### Observation vector ###     X        Y      Z       Q1   Q2   Q3   Q4   R       P       Y       VX       VY       VZ       WX       WY       WZ       IMU_AX    IMU_AY   IMU_AZ    IMU_WX    IMU_WY   IMU_WZ            P1            P2            P3
+        #### Observation vector ###
         obs_lower_bound = np.array([[
             -np.inf, -np.inf, -np.inf,  # X         Y         Z  
-            -1., -1., -1., -1.,         # Q1        Q2        Q3   Q4 
+            -1., -1., -1., -1.,         # Q1        Q2        Q3        Q4 
             -np.pi, -np.pi, -np.pi,     # R         P         Y 
             -np.inf, -np.inf, -np.inf,  # VX        VY        VZ
             -np.inf, -np.inf, -np.inf,  # WX        WY        WZ
             -np.inf, -np.inf, -np.inf,  # IMU_AX    IMU_AY    IMU_AZ
             -np.inf, -np.inf, -np.inf,  # IMU_WX    IMU_WY    IMU_WZ
-            0.,  0.,  0.,  0.           #  P0            P1            P2            P3
+            0.,  0.,  0.,  0.           # P0        P1        P2        P3
         ] for i in range(self.NUM_DRONES)])
         obs_upper_bound = np.array([[
             np.inf,  np.inf,  np.inf,

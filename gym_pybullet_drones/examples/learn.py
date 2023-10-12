@@ -41,7 +41,7 @@ def run(output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_GUI, plot=True, colab=D
                 env,
                 verbose=1
                 )
-    model.learn(total_timesteps=10000) # Typically not enough
+    model.learn(total_timesteps=400000) # Typically not enough
 
     #### Show (and record a video of) the model's performance ##
     env = HoverAviary(gui=gui,
@@ -54,7 +54,9 @@ def run(output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_GUI, plot=True, colab=D
                     )
     obs, info = env.reset(seed=42, options={})
     start = time.time()
-    for i in range(3*env.CTRL_FREQ):
+    _=input("Pres enter for start testing")
+
+    for i in range(300*env.CTRL_FREQ):
         action, _states = model.predict(obs,
                                         deterministic=True
                                         )
