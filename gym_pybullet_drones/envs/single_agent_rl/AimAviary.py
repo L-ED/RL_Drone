@@ -1,5 +1,6 @@
-import numpy as np
 
+import numpy as np
+from gymnasium import spaces
 import pybullet as p
 
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
@@ -50,6 +51,11 @@ class HoverAviary(BaseSingleAgentAviary):
             The type of action space (1 or 3D; RPMS, thurst and torques, or waypoint with PID control)
 
         """
+        self.INIT_XYZS = np.array([
+            [0, 0, 10]
+        ])
+        self.IMG_RES = np.array([160, 120])
+
         super().__init__(drone_model=drone_model,
                          initial_xyzs=initial_xyzs,
                          initial_rpys=initial_rpys,
@@ -62,6 +68,21 @@ class HoverAviary(BaseSingleAgentAviary):
                          act=act
                          )
 
+        self.target_pose = np.array([30.5, -2.5, .5])
+        self._addObstacles()
+        self.target_class = 67108867
+        
+        self.targ_pitch=0
+        self.targ_yaw=0
+
+        self.h=self.IMG_RES[1]
+        self.w=self.IMG_RES[0]
+        self.hfov=60
+        self.f = self.w/(2*np.tan(self.hfov/2))
+        self.vfov = np.arctan(self.h/(2*self.f))
+        self.fov=np.array(
+            [self.vfov, self.hfov]
+        )
     ################################################################################
     
     def _computeReward(self):
@@ -76,6 +97,12 @@ class HoverAviary(BaseSingleAgentAviary):
         state = self._getDroneStateVector(0)
 
         pos = state[0:3]
+
+        diff = np.sum((pos - self.target_pose)**2)
+
+        ground_hit = 
+
+
         rpy = state[7:10]
         vel = state[10:13]
         ang_vel = state[13:16]
@@ -84,34 +111,9 @@ class HoverAviary(BaseSingleAgentAviary):
         displ_dir = disp/np.linalg.norm(disp)
         flight_dir = vel/np.linalg.norm(vel)
 
-        # print('Position: ', pos, " Velocity: ", vel)
-        # print('Displacement ', disp, "Disp_dir ", displ_dir)
-        # print("Velocity dir ", flight_dir)
-
-        # p.addUserDebugLine(
-        #     pos, pos+pos*2000000000
-        # )
-
-        # p.addUserDebugLine(
-        #     np.array([0, 0, 1]), np.array([0, 0, 1])+np.array([0, 0, 2]), [0, 1, 0]
-        # )
-
-
-        # print(flight_dir, displ_dir)
-
-        ang_cos = np.dot(flight_dir, displ_dir)
-        # print("Cos between dirs", ang_cos)
-        # print(ang_cos)
-
-        reward = -100*np.linalg.norm(np.abs(vel)) - \
-                10*np.sum(disp**2)- \
-                10*np.linalg.norm(np.abs(rpy)) - \
-                100*np.linalg.norm(np.abs(ang_vel)) -\
-                100*ang_cos
-
         # print(reward)
 
-        return  reward
+        return reward
     ################################################################################
     
     def _computeTerminated(self):
@@ -158,8 +160,64 @@ class HoverAviary(BaseSingleAgentAviary):
         """
         return {"answer": 42} #### Calculated by the Deep Thought supercomputer in 7.5M years
 
-    ################################################################################
-    
+
+    def _computeObs(self):
+        """Returns the current observation of the environment.
+
+        Returns
+        -------
+        ndarray
+            A Box() of shape (H,W,4) or (12,) depending on the observation type.
+
+        """
+        if self.step_counter%self.IMG_CAPTURE_FREQ == 0: 
+            self.rgb[0], self.dep[0], self.seg[0] = self._getDroneImages(0)
+
+            shape = np.array(self.seg[0].shape[:2])
+            targ_pixls = np.where(self.seg[0]==self.targ_cls)
+            if len(targ_pixls)>0:
+                targ_center = np.mean(np.where(self.seg[0]==self.targ_cls), axis=1)
+                self.targ_pitch, self.targ_yaw = (targ_center - shape//2)/shape*self.fov
+        
+        obs = self._clipAndNormalizeState(self._getDroneStateVector(0))
+        ret = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16], self.targ_pitch/self.fov[0]*2, self.targ_yaw/self.fov[1]*2]).reshape(14,)
+        return ret.astype('float32')
+
+
+
+    def _observationSpace(self):
+        """Returns the observation space of the environment.
+
+        Returns
+        -------
+        ndarray
+            A Box() of shape (H,W,4) or (12,) depending on the observation type.
+
+        """
+        if self.OBS_TYPE == ObservationType.RGB:
+            return spaces.Box(low=0,
+                              high=255,
+                              shape=(self.IMG_RES[1], self.IMG_RES[0], 4),
+                              dtype=np.uint8
+                              )
+        elif self.OBS_TYPE == ObservationType.KIN:
+            ############################################################
+            #### OBS OF SIZE 20 (WITH QUATERNION AND RPMS)
+            #### Observation vector ### X        Y        Z       Q1   Q2   Q3   Q4   R       P       Y       VX       VY       VZ       WX       WY       WZ       P0            P1            P2            P3
+            # obs_lower_bound = np.array([-1,      -1,      0,      -1,  -1,  -1,  -1,  -1,     -1,     -1,     -1,      -1,      -1,      -1,      -1,      -1,      -1,           -1,           -1,           -1])
+            # obs_upper_bound = np.array([1,       1,       1,      1,   1,   1,   1,   1,      1,      1,      1,       1,       1,       1,       1,       1,       1,            1,            1,            1])          
+            # return spaces.Box( low=obs_lower_bound, high=obs_upper_bound, dtype=np.float32 )
+            ############################################################
+            #### OBS SPACE OF SIZE 14
+            return spaces.Box(low=np.array([-1,-1,0, -1,-1,-1, -1,-1,-1, -1,-1,-1, -1,-1]),
+                              high=np.array([1,1,1, 1,1,1, 1,1,1, 1,1,1, 1,1]),
+                              dtype=np.float32
+                              )
+            ############################################################
+        else:
+            print("[ERROR] in BaseSingleAgentAviary._observationSpace()")
+
+
     def _clipAndNormalizeState(self,
                                state
                                ):
@@ -245,3 +303,29 @@ class HoverAviary(BaseSingleAgentAviary):
             print("[WARNING] it", self.step_counter, "in HoverAviary._clipAndNormalizeState(), clipped xy velocity [{:.2f} {:.2f}]".format(state[10], state[11]))
         if not(clipped_vel_z == np.array(state[12])).all():
             print("[WARNING] it", self.step_counter, "in HoverAviary._clipAndNormalizeState(), clipped z velocity [{:.2f}]".format(state[12]))
+
+
+    def _addObstacles(self):
+        """Add obstacles to the environment.
+
+        These obstacles are loaded from standard URDF files included in Bullet.
+
+        # """
+        # p.loadURDF("samurai.urdf",
+        #            physicsClientId=self.CLIENT
+        #            )
+        p.loadURDF("duck_vhacd.urdf",
+                   [-.5, -.5, .05],
+                   p.getQuaternionFromEuler([0, 0, 0]),
+                   physicsClientId=self.CLIENT
+                   )
+        p.loadURDF("cube_no_rotation.urdf",
+                   self.target_pose.tolist(),
+                   p.getQuaternionFromEuler([0, 0, 0]),
+                   physicsClientId=self.CLIENT
+                   )
+        p.loadURDF("sphere2.urdf",
+                   [0, 2, .5],
+                   p.getQuaternionFromEuler([0,0,0]),
+                   physicsClientId=self.CLIENT
+                   )
