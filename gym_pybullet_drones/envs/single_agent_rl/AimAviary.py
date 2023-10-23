@@ -104,6 +104,18 @@ class HoverAviary(BaseSingleAgentAviary):
         diff = pos - self.target_pose
         targ_dir = diff/np.linalg.norm(diff)
         flight_dir = vel/np.linalg.norm(vel)
+        flight_cos = np.dot(targ_dir, flight_dir)
+        diff = np.sum(diff**2)
+
+        ground_hit = pos[2]<0.4
+
+        rot_mtrx = np.array(
+            p.getMatrixFromQuaternion(state[3:7])
+        ).reshape((3,3))
+        cam_vec = np.dot(rot_mtrx, np.array([1, 0, 0]))
+        cam_dir = cam_vec/np.linalg.norm(cam_vec)
+        cam_cos = np.dot(targ_dir, cam_dir)
+        ang_reward = 0 if abs(cam_cos)>np.cos(np.pi/3) else 1
 
         vel_cos = np.dot(targ_dir, flight_dir)
 
@@ -112,8 +124,9 @@ class HoverAviary(BaseSingleAgentAviary):
         ground_hit = pos[2] < 0.04
 
         # print(reward)
+        # targ_hit_reward = 
 
-        return reward
+        return 100*ang_reward - diff - 1000*ground_hit
     ################################################################################
     
     def _computeTerminated(self):
