@@ -97,19 +97,19 @@ class HoverAviary(BaseSingleAgentAviary):
         state = self._getDroneStateVector(0)
 
         pos = state[0:3]
-
-        diff = np.sum((pos - self.target_pose)**2)
-
-        ground_hit = 
-
-
         rpy = state[7:10]
         vel = state[10:13]
         ang_vel = state[13:16]
 
-        disp = np.array([0, 0, 1]) - pos
-        displ_dir = disp/np.linalg.norm(disp)
+        diff = pos - self.target_pose
+        targ_dir = diff/np.linalg.norm(diff)
         flight_dir = vel/np.linalg.norm(vel)
+
+        vel_cos = np.dot(targ_dir, flight_dir)
+
+        diff = np.sum((diff)**2)
+
+        ground_hit = pos[2] < 0.04
 
         # print(reward)
 
