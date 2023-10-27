@@ -29,3 +29,9 @@ register(
     id='leaderfollower-aviary-v0',
     entry_point='gym_pybullet_drones.envs.multi_agent_rl:LeaderFollowerAviary',
 )
+
+
+register(
+    id="aim-aviary-v0",
+    entry_point="gym_pybullet_drones.envs.single_agent_rl:AimAviary"
+)
