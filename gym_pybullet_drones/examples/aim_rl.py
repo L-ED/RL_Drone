@@ -43,7 +43,7 @@ def run(output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_GUI, plot=True, colab=D
                 env,
                 verbose=1
             )
-    model.learn(total_timesteps=20000) # Typically not enough
+    model.learn(total_timesteps=3000000) # Typically not enough
 
     #### Show (and record a video of) the model's performance ##
     env = AimAviary(gui=gui,

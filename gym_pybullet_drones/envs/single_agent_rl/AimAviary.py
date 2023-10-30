@@ -120,26 +120,37 @@ class AimAviary(BaseAviary):
         vel = state[10:13]
         ang_vel = state[13:16]
 
-        diff = pos - self.target_pose
+        diff = self.target_pose - pos
         targ_dir = diff/np.linalg.norm(diff)
         flight_dir = vel/np.linalg.norm(vel)
+        vel_mag = np.sum(vel**2)**0.5
         flight_cos = np.dot(targ_dir, flight_dir)
         diff = np.sum(diff**2)**0.5
 
-        ground_hit = pos[2]<0.04
+        ground_hit = (pos[2]<0.1)*(0.1 - pos[2])
 
-        rot_mtrx = np.array(
-            p.getMatrixFromQuaternion(state[3:7])
-        ).reshape((3,3))
-        cam_vec = np.dot(rot_mtrx, np.array([1, 0, 0]))
-        cam_dir = cam_vec/np.linalg.norm(cam_vec)
-        cam_cos = np.dot(targ_dir, cam_dir)
-        ang_reward = 0 if abs(cam_cos)>np.cos(np.pi/3) else 1
+        # rot_mtrx = np.array(
+        #     p.getMatrixFromQuaternion(state[3:7])
+        # ).reshape((3,3))
+        # cam_vec = np.dot(rot_mtrx, np.array([1, 0, 0]))
+        # cam_dir = cam_vec/np.linalg.norm(cam_vec)
+        # cam_cos = np.dot(targ_dir, cam_dir)
+        # ang_reward = 0 if abs(cam_cos)<np.cos(np.pi/3) else 1
 
+        aim_err = (((self.targ_pitch - np.pi/9))**2 + (self.targ_yaw)**2)**0.5
+        
         # print(reward)
         # targ_hit_reward = 
-        reward = ang_reward - diff + flight_cos #- 1000*ground_hit
-        print("REWARD", reward)
+
+
+        reward = flight_cos*vel_mag - 100*ground_hit - aim_err*vel_mag
+        print(
+            "REWARD", reward,
+            # "Dist_reward", diff, 
+            "Flight_reward ", flight_cos*vel_mag,
+            "Aim ", - aim_err*vel_mag,
+            "Ground Hit ", - 100*ground_hit
+        )
         return reward
     ################################################################################
     
@@ -207,10 +218,10 @@ class AimAviary(BaseAviary):
             targ_center = np.mean(np.where(self.seg[0]==self.targ_cls), axis=1)
             self.targ_pitch, self.targ_yaw = (targ_center - shape//2)/shape*self.fov
         else:
-            print("FOV is", self.fov)
+            # print("FOV is", self.fov)
             self.targ_pitch, self.targ_yaw = self.fov
 
-        print(self.targ_pitch, self.targ_yaw)
+        # print(self.targ_pitch, self.targ_yaw)
         
         obs = self._clipAndNormalizeState(self._getDroneStateVector(0))
         ret = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16], self.targ_pitch/self.fov[0]*2, self.targ_yaw/self.fov[1]*2]).reshape(14,)
