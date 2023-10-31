@@ -136,6 +136,7 @@ class AimAviary(BaseAviary):
         # cam_dir = cam_vec/np.linalg.norm(cam_vec)
         # cam_cos = np.dot(targ_dir, cam_dir)
         # ang_reward = 0 if abs(cam_cos)<np.cos(np.pi/3) else 1
+        rot_vel = np.sum(ang_vel**2)**0.5
 
         aim_err = (((self.targ_pitch - np.pi/9))**2 + (self.targ_yaw)**2)**0.5
         
@@ -143,13 +144,14 @@ class AimAviary(BaseAviary):
         # targ_hit_reward = 
 
 
-        reward = flight_cos*vel_mag - 100*ground_hit - aim_err*vel_mag
+        reward = flight_cos*vel_mag - 50*ground_hit - aim_err*vel_mag - rot_vel
         print(
             "REWARD", reward,
             # "Dist_reward", diff, 
             "Flight_reward ", flight_cos*vel_mag,
             "Aim ", - aim_err*vel_mag,
-            "Ground Hit ", - 100*ground_hit
+            "Ground Hit ", - 100*ground_hit,
+            "Rot vel", - rot_vel
         )
         return reward
     ################################################################################

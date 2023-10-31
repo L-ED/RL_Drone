@@ -15,6 +15,7 @@ The drones move, at different altitudes, along cicular trajectories
 in the X-Y plane, around point (0, -.3).
 
 """
+import torch
 import time
 import argparse
 import gymnasium as gym
@@ -43,7 +44,11 @@ def run(output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_GUI, plot=True, colab=D
                 env,
                 verbose=1
             )
-    model.learn(total_timesteps=3000000) # Typically not enough
+    
+    total_timesteps=6000000
+    model.learn(total_timesteps=total_timesteps) # Typically not enough
+
+    torch.save(model.policy, f"/home/led/Simulators/Bullet/gym-pybullet-drones/results/aim_rl_{total_timesteps}_tsmp.pth")
 
     #### Show (and record a video of) the model's performance ##
     env = AimAviary(gui=gui,
