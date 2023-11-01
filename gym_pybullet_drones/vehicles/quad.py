@@ -2,24 +2,31 @@ from dataclasses import dataclass, InitVar, field
 from typing import Union, List
 import pkg_resources 
 
-from gym_pybullet_drones.utils import State, Device 
+from gym_pybullet_drones.utils import State, Device, Control_System
 
 import pybullet as pb
+from gymnasium import spaces
+
 
 @dataclass
 class QuadCopter:
     client: int
-    filename: InitVar[str] = None # maybe in post init
-    state: State 
+    state: State
+    filename: str = None # maybe in post init
+    sensors: InitVar[List[Device]] = field(default_factory=list)
+    control_system: Control_System = None 
     ID: int = None
-    devices: List[Device] = field(default_factory=list)
 
-    def __post_init__(self):
+
+    def __post_init__(self, sensors):
         
         self._parseURDF()
-        self.load_model()
-        self.load_devices()
+        actionSpace = self.load_model()
+        obsSpace = self.load_sensors(sensors)
         self.set_initial_state()
+        self.control_system()
+
+        return obsSpace, actionSpace
 
 
     def _parseURDF(self):
@@ -88,12 +95,41 @@ class QuadCopter:
         )
 
 
-    def load_devices(self):
+    def load_sensors(self, sensors):
         
         '''
-        Parse devices configs from URDF or SDF file and add to devices list
+        Parse sensors configs from URDF or SDF file and add to sensors list
         '''
-        raise NotImplementedError("No parser for URDF or SDF")
+        observation_space = {}
+        sensors_counter = {}
+        for sensor in sensors:
+            sens_ = sensor(self.ID, len(sensors_counter[sensor.type]))
+            
+            observation_space[sensor.name].append(sensor.observation_space)
+
+        return observation_space
+        # raise NotImplementedError("No parser for URDF or SDF")
+    
+    def take_observation(self, timestemp):
+
+        observation
+        for sensor in self.sensors:
+            observation.append(sensor(timestemp))
+
+        ret
+
+
+
+
+    def take_dev_freqs(self):
+
+        self.freqs = set([
+            sensor.freq for sensor in self.sensors 
+        ])
+
+        self.freqs.add(self.control.freq)
+
+
 
 
 
