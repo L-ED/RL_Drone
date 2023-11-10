@@ -45,7 +45,7 @@ def run(output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_GUI, plot=True, colab=D
                 verbose=1
             )
     
-    total_timesteps=6000000
+    total_timesteps=4000000
     model.learn(total_timesteps=total_timesteps) # Typically not enough
 
     torch.save(model.policy, f"/home/led/Simulators/Bullet/gym-pybullet-drones/results/aim_rl_{total_timesteps}_tsmp.pth")

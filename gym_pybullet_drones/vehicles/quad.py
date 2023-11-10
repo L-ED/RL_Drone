@@ -2,6 +2,8 @@ from dataclasses import dataclass, InitVar, field
 from typing import Union, List
 import pkg_resources 
 
+import numpy as np
+
 from gym_pybullet_drones.utils import State, Device, Control_System
 
 import pybullet as pb
@@ -13,18 +15,18 @@ class QuadCopter:
     client: int
     state: State
     filename: str = None # maybe in post init
-    sensors: InitVar[List[Device]] = field(default_factory=list)
+    sensors: List[Device] = field(default_factory=list)
     control_system: Control_System = None 
     ID: int = None
 
 
-    def __post_init__(self, sensors):
+    def __post_init__(self):
         
         self._parseURDF()
         actionSpace = self.load_model()
-        obsSpace = self.load_sensors(sensors)
+        obsSpace = self.load_sensors()
         self.set_initial_state()
-        self.control_system()
+        self.control_system.set_base(self)
 
         return obsSpace, actionSpace
 
@@ -95,30 +97,35 @@ class QuadCopter:
         )
 
 
-    def load_sensors(self, sensors):
-        
+    def load_sensors(self):
         '''
         Parse sensors configs from URDF or SDF file and add to sensors list
         '''
         observation_space = {}
         sensors_counter = {}
-        for sensor in sensors:
-            sens_ = sensor(self.ID, len(sensors_counter[sensor.type]))
-            
+        for sensor in self.sensors:
+            sensor.set_base(self.ID)
+            name = sensor.name_base + "_" +\
+                str(sensors_counter[sensor.name_base])
+            sensor.set_name(name)
+
             observation_space[sensor.name].append(sensor.observation_space)
 
-        return observation_space
-        # raise NotImplementedError("No parser for URDF or SDF")
+        return spaces.Dict(observation_space)
     
-    def take_observation(self, timestemp):
+    
+    def compute_observation(self, timestemp):
 
-        observation
+        observation = {}
         for sensor in self.sensors:
-            observation.append(sensor(timestemp))
+            observation[sensor.name] = sensor(timestemp)
 
-        ret
+        self._observation = observation
+        return observation
+    
 
-
+    def compute_action(self, timestemp):
+        return self.control_system(self._observation)
 
 
     def take_dev_freqs(self):
@@ -127,7 +134,59 @@ class QuadCopter:
             sensor.freq for sensor in self.sensors 
         ])
 
-        self.freqs.add(self.control.freq)
+        self.freqs.add(self.control_system.freq)
+
+
+    def model(self, RPS, env):
+        
+        # X axis is direction of drone forward movement
+        # Y axis directed from right to left side of copter
+        # Z axis directed upward from drone botton 
+
+        thrust = self.Ct*env.rho*RPS*self.prop_diam**4
+        torque = self.Cq*env.rho*RPS*self.prop_diam**5 
+        # CW rotation produces CCW torque
+        # motors orientation means rotation direction CW = 1, CCW = -1
+        
+        moment_z = np.dot(self.motor_orientation, torque)      
+        moment_x = self.ly*np.dot([-1, 1, -1, 1], thrust)
+        moment_y = self.lx*np.dot([-1, -1, 1, 1], thrust)
+        axes_torques = np.array([
+            moment_x, moment_y, moment_z
+        ])
+
+        # https://en.wikipedia.org/wiki/Euler%27s_equations_(rigid_body_dynamics)
+        angular_accel = np.dot(
+            self.J_inv,
+            axes_torques - np.cross(
+                self.state.ang_vel,
+                np.dot(self.J, self.state.ang_vel) 
+            )
+        )
+
+        linear_accel = thrust/self.mass
+        ang_vel += env.timestemp*angular_accel
+
+        return linear_accel, ang_vel, thrust, torque, moment_z
+
+        
+    def apply_force(self, thrust, moment_z):
+        for i in range(4):
+            pb.applyExternalForce(self.ID,
+                                 i,
+                                 forceObj=[0, 0, thrust[i]],
+                                 posObj=[0, 0, 0],
+                                 flags=pb.LINK_FRAME,
+                                 physicsClientId=self.CLIENT
+                                 )
+        pb.applyExternalTorque(
+            self.ID,
+            4,
+            torqueObj=[0, 0, moment_z],
+            flags=pb.LINK_FRAME,
+            physicsClientId=self.CLIENT
+        )
+
 
 
 
