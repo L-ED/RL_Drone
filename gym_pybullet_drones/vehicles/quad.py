@@ -9,23 +9,43 @@ from gym_pybullet_drones.utils import State, Device, Control_System
 import pybullet as pb
 from gymnasium import spaces
 
+from gym_pybullet_drones.utils.enums import DroneModel
 
-@dataclass
+import copy
+
+
 class QuadCopter:
-    client: int
-    state: State
-    filename: str = None # maybe in post init
-    sensors: List[Device] = field(default_factory=list)
-    control_system: Control_System = None 
-    ID: int = None
 
+    def __init__(
+            self, 
+            client: int,  
+            filename: str, 
+            sensors: List[Device],
+            state: State=None, 
+            control_system: Control_System = None
+        ):
 
-    def __post_init__(self):
+        self.filepath = pkg_resources.resource_filename(
+            'gym_pybullet_drones', 'assets/'+self.filename
+        )
         
+        self.client = client
+        if state is None:
+            self.state = State()
         self._parseURDF()
-        actionSpace = self.load_model()
-        obsSpace = self.load_sensors()
+
+
+        actionSpace = spaces.Box(
+            low=np.zeros(4),
+            high=np.ones(4),
+            dtype=np.float32
+        )
+        
+        self.load_model(filename)
+        obsSpace = self.load_sensors(sensors)
         self.set_initial_state()
+
+        self.control_system = control_system
         self.control_system.set_base(self)
 
         return obsSpace, actionSpace
@@ -35,17 +55,17 @@ class QuadCopter:
         raise NotImplementedError("No URDF parse in Default class")
 
 
-    def load_model(self, state):
+    def load_model(self):
 
-        filepath = pkg_resources.resource_filename(
-            'gym_pybullet_drones', 'assets/'+self.filename
-        )
+        state = self.state.world
 
-        if self.source_file.endswith('urdf'):
+        if self.filepath.endswith('urdf'):
             self.ID = pb.loadURDF(
-                filepath,
-                self.state.pos,
-                self.state.quat, #pb.getQuaternionFromEuler(self.INIT_RPYS),
+                self.filepath,
+                state.pos,
+                pb.getQuaternionFromEuler(
+                    state.ang
+                ), #pb.getQuaternionFromEuler(self.INIT_RPYS),
                 flags = (
                     pb.URDF_USE_INERTIA_FROM_FILE | \
                     pb.URDF_MERGE_FIXED_LINKS | \
@@ -54,36 +74,38 @@ class QuadCopter:
                 physicsClientId=self.client
             )
 
-        elif self.source_file.endswith('sdf'):
+        elif self.filepath.endswith('sdf'):
             self.ID = pb.loadSDF(
-                filepath,
+                self.filepath,
                 physicsClientId=self.client
             )
             pb.resetBasePositionAndOrientation(
                 self.ID,
-                self.state.pos,
-                self.state.quat,
+                state.pos,
+                pb.getQuaternionFromEuler(state.ang),
                 physicsClientId=self.client
             )
 
         else:
-            raise ValueError(f"No loader for file {self.source_file}")
+            raise ValueError(f"No loader for file {self.filepath}")
 
 
     def set_initial_state(self):
 
+        state = self.state.world
+
         # Set initial velocity https://pybullet.org/Bullet/phpBB3/viewtopic.php?t=11793
         pb.resetBaseVelocity(
             self.ID, # model
-            self.state.lin_vel, # linear velocity
-            self.state.ang_vel  # angular velocity
+            state.lin_vel, # linear velocity
+            state.ang_vel  # angular velocity
         )
 
         pb.applyExternalForce(
             self.ID,
             4, # base link
-            forceObj=self.state.force,
-            posObj=self.state.pos,
+            forceObj=state.force,
+            posObj=state.pos,
             flags=pb.WORLD_FRAME, #
             physicsClientId=self.client
         )
@@ -91,8 +113,8 @@ class QuadCopter:
         pb.applyExternalTorque(
             self.ID,
             4, # base link
-            torqueObj=self.state.torque,
-            flags=pb.LINK_FRAME,
+            torqueObj=state.torque,
+            flags=pb.WORLD_FRAME,
             physicsClientId=self.client
         )
 
@@ -125,7 +147,7 @@ class QuadCopter:
     
 
     def compute_action(self, timestemp):
-        return self.control_system(self._observation)
+        return self.control_system(self._observation, timestemp)
 
 
     def take_dev_freqs(self):
@@ -137,8 +159,12 @@ class QuadCopter:
         self.freqs.add(self.control_system.freq)
 
 
-    def model(self, RPS, env):
+    def model(self, RPS, env, state=None):
         
+        if state is None:
+            state = copy.deepcopy(self.state)
+        
+        future_state = State()
         # X axis is direction of drone forward movement
         # Y axis directed from right to left side of copter
         # Z axis directed upward from drone botton 
@@ -147,15 +173,133 @@ class QuadCopter:
         torque = self.Cq*env.rho*RPS*self.prop_diam**5 
         # CW rotation produces CCW torque
         # motors orientation means rotation direction CW = 1, CCW = -1
-        
+        future_state.local.forces = np.array([0, 0, sum(thrust)])
+
         moment_z = np.dot(self.motor_orientation, torque)      
         moment_x = self.ly*np.dot([-1, 1, -1, 1], thrust)
         moment_y = self.lx*np.dot([-1, -1, 1, 1], thrust)
         axes_torques = np.array([
             moment_x, moment_y, moment_z
         ])
+        future_state.local.torques = axes_torques
 
         # https://en.wikipedia.org/wiki/Euler%27s_equations_(rigid_body_dynamics)
+        angular_accel = np.dot(
+            self.J_inv,
+            axes_torques - np.cross(
+                self.state.local.ang_vel,
+                np.dot(self.J, self.state.local.ang_vel) 
+            )
+        )
+
+        future_state.local.ang_acc = angular_accel
+        future_state.local.acc = np.array([0, 0, sum(thrust)/self.mass])
+        future_state.local.ang_vel += env.timestemp*angular_accel
+
+        return  future_state
+
+        
+    def apply_force(self, state):
+
+        for i in range(4):
+            pb.applyExternalForce(self.ID,
+                                 i,
+                                 forceObj=state.local.forces,
+                                 posObj=[0, 0, 0],
+                                 flags=pb.LINK_FRAME,
+                                 physicsClientId=self.client
+                                 )
+        pb.applyExternalTorque(
+            self.ID,
+            4,
+            torqueObj=state.local.torques,
+            flags=pb.LINK_FRAME,
+            physicsClientId=self.client
+        )
+
+    
+    def create_step(self, env):
+
+        obs = self.compute_observation(env.timestemp)
+        act = self.compute_action(env.timestemp)
+        future_state = self.model(act, env)
+        self.apply_force(future_state)
+        
+
+
+
+class GymCopter(QuadCopter):
+
+    def __init__(self, client: int, drone_model: DroneModel, sensors: List, state: State = None, control_system: Control_System = None):
+        self.drone_model = drone_model
+        filename = self.drone_model.value + ".urdf"
+        super().__init__(client, filename, sensors, state, control_system)
+
+
+    def _parseURDF(self):
+
+        URDF_TREE = etxml.parse(self.filepath).getroot()
+        self.M = float(URDF_TREE[1][0][1].attrib['value'])
+        self.L = float(URDF_TREE[0].attrib['arm'])
+        self.THRUST2WEIGHT_RATIO = float(URDF_TREE[0].attrib['thrust2weight'])
+        IXX = float(URDF_TREE[1][0][2].attrib['ixx'])
+        IYY = float(URDF_TREE[1][0][2].attrib['iyy'])
+        IZZ = float(URDF_TREE[1][0][2].attrib['izz'])
+        self.J = np.diag([IXX, IYY, IZZ])
+        self.J_inv = np.linalg.inv(self.J)
+        self.KF = float(URDF_TREE[0].attrib['kf'])
+        self.KM = float(URDF_TREE[0].attrib['km'])
+        self.COLLISION_H = float(URDF_TREE[1][2][1][0].attrib['length'])
+        self.COLLISION_R = float(URDF_TREE[1][2][1][0].attrib['radius'])
+        COLLISION_SHAPE_OFFSETS = [float(s) for s in URDF_TREE[1][2][0].attrib['xyz'].split(' ')]
+        self.COLLISION_Z_OFFSET = COLLISION_SHAPE_OFFSETS[2]
+        self.MAX_SPEED_KMH = float(URDF_TREE[0].attrib['max_speed_kmh'])
+        self.GND_EFF_COEFF = float(URDF_TREE[0].attrib['gnd_eff_coeff'])
+        self.PROP_RADIUS = float(URDF_TREE[0].attrib['prop_radius'])
+        DRAG_COEFF_XY = float(URDF_TREE[0].attrib['drag_coeff_xy'])
+        DRAG_COEFF_Z = float(URDF_TREE[0].attrib['drag_coeff_z'])
+        self.DRAG_COEFF = np.array([DRAG_COEFF_XY, DRAG_COEFF_XY, DRAG_COEFF_Z])
+        self.DW_COEFF_1 = float(URDF_TREE[0].attrib['dw_coeff_1'])
+        self.DW_COEFF_2 = float(URDF_TREE[0].attrib['dw_coeff_2'])
+        self.DW_COEFF_3 = float(URDF_TREE[0].attrib['dw_coeff_3'])
+
+        self.GRAVITY = self.G*self.M
+
+        self.HOVER_RPM = np.sqrt(self.GRAVITY / (4*self.KF))
+        self.MAX_RPM = np.sqrt((self.THRUST2WEIGHT_RATIO*self.GRAVITY) / (4*self.KF))
+            
+        self.MAX_THRUST = (4*self.KF*self.MAX_RPM**2)
+            
+        if self.drone_model in [DroneModel.CF2X, DroneModel.RACE]:
+            self.MAX_XY_TORQUE = (2*self.L*self.KF*self.MAX_RPM**2)/np.sqrt(2)
+        elif self.drone_model == DroneModel.CF2P:
+            self.MAX_XY_TORQUE = (self.L*self.KF*self.MAX_RPM**2)
+        
+        self.MAX_Z_TORQUE = (2*self.KM*self.MAX_RPM**2)
+
+        self.GND_EFF_H_CLIP = 0.25 * self.PROP_RADIUS * np.sqrt((15 * self.MAX_RPM**2 * self.KF * self.GND_EFF_COEFF) / self.MAX_THRUST)
+
+
+    def model(self, RPS, env):
+
+        rpm = RPS*60
+        forces = np.array(rpm**2)*self.KF
+        torques = np.array(rpm**2)*self.KM
+        if self.drone_model == DroneModel.RACE:
+            torques = -torques
+        z_torque = (-torques[0] + torques[1] - torques[2] + torques[3])
+    
+        thrust = np.array([0, 0, np.sum(forces)])
+
+        if self.DRONE_MODEL in [DroneModel.CF2X, DroneModel.RACE]:
+            x_torque = (forces[0] + forces[1] - forces[2] - forces[3]) * (self.L/np.sqrt(2))
+            y_torque = (- forces[0] + forces[1] + forces[2] - forces[3]) * (self.L/np.sqrt(2))
+        elif self.DRONE_MODEL==DroneModel.CF2P:
+            x_torque = (forces[1] - forces[3]) * self.L
+            y_torque = (-forces[0] + forces[2]) * self.L
+
+        axes_torques = np.array([x_torque, y_torque, z_torque])
+
         angular_accel = np.dot(
             self.J_inv,
             axes_torques - np.cross(
@@ -167,157 +311,4 @@ class QuadCopter:
         linear_accel = thrust/self.mass
         ang_vel += env.timestemp*angular_accel
 
-        return linear_accel, ang_vel, thrust, torque, moment_z
-
-        
-    def apply_force(self, thrust, moment_z):
-        for i in range(4):
-            pb.applyExternalForce(self.ID,
-                                 i,
-                                 forceObj=[0, 0, thrust[i]],
-                                 posObj=[0, 0, 0],
-                                 flags=pb.LINK_FRAME,
-                                 physicsClientId=self.CLIENT
-                                 )
-        pb.applyExternalTorque(
-            self.ID,
-            4,
-            torqueObj=[0, 0, moment_z],
-            flags=pb.LINK_FRAME,
-            physicsClientId=self.CLIENT
-        )
-
-
-
-
-
-
-
-@dataclass
-class GymCopter(QuadCopter):
-    DRONE_MODEL: InitVar[str]
-    G: float
-    M: float = None
-    L: float = None
-    THRUST2WEIGHT_RATIO: float = None
-    J: float = None
-    J_INV: float = None
-    KF: float = None
-    KM: float = None 
-    COLLISION_H: float = None
-    COLLISION_R: float = None
-    COLLISION_Z_OFFSET: float = None
-    MAX_SPEED_KMH: float = None
-    GND_EFF_COEFF: float = None
-    PROP_RADIUS: float = None
-    DRAG_COEFF: float = None
-    DW_COEFF_1: float = None
-    DW_COEFF_2: float = None
-    DW_COEFF_3: float = None
-
-    GRAVITY: float = None
-    HOVER_RPM: float = None
-    MAX_RPM: float = None
-    MAX_THRUST: float = None
-    MAX_XY_TORQUE: float = None
-    MAX_Z_TORQUE: float = None
-    GND_EFF_H_CLIP: float = None
-
-
-    def _parseURDF(self):
-
-        URDF_TREE = etxml.parse(pkg_resources.resource_filename('gym_pybullet_drones', 'assets/'+self.URDF)).getroot()
-        self.M = float(URDF_TREE[1][0][1].attrib['value'])
-        self.L = float(URDF_TREE[0].attrib['arm'])
-        self.THRUST2WEIGHT_RATIO = float(URDF_TREE[0].attrib['thrust2weight'])
-        IXX = float(URDF_TREE[1][0][2].attrib['ixx'])
-        IYY = float(URDF_TREE[1][0][2].attrib['iyy'])
-        IZZ = float(URDF_TREE[1][0][2].attrib['izz'])
-        self.J = np.diag([IXX, IYY, IZZ])
-        self.J_INV = np.linalg.inv(self.J)
-        self.KF = float(URDF_TREE[0].attrib['kf'])
-        self.KM = float(URDF_TREE[0].attrib['km'])
-        self.COLLISION_H = float(URDF_TREE[1][2][1][0].attrib['length'])
-        self.COLLISION_R = float(URDF_TREE[1][2][1][0].attrib['radius'])
-        COLLISION_SHAPE_OFFSETS = [float(s) for s in URDF_TREE[1][2][0].attrib['xyz'].split(' ')]
-        self.COLLISION_Z_OFFSET = COLLISION_SHAPE_OFFSETS[2]
-        self.MAX_SPEED_KMH = float(URDF_TREE[0].attrib['max_speed_kmh'])
-        self.GND_EFF_COEFF = float(URDF_TREE[0].attrib['gnd_eff_coeff'])
-        self.PROP_RADIUS = float(URDF_TREE[0].attrib['prop_radius'])
-        DRAG_COEFF_XY = float(URDF_TREE[0].attrib['drag_coeff_xy'])
-        DRAG_COEFF_Z = float(URDF_TREE[0].attrib['drag_coeff_z'])
-        self.DRAG_COEFF = np.array([DRAG_COEFF_XY, DRAG_COEFF_XY, DRAG_COEFF_Z])
-        self.DW_COEFF_1 = float(URDF_TREE[0].attrib['dw_coeff_1'])
-        self.DW_COEFF_2 = float(URDF_TREE[0].attrib['dw_coeff_2'])
-        self.DW_COEFF_3 = float(URDF_TREE[0].attrib['dw_coeff_3'])
-
-
-        self.GRAVITY = self.G*self.M
-
-        self.HOVER_RPM = np.sqrt(self.GRAVITY / (4*self.KF))
-        self.MAX_RPM = np.sqrt((self.THRUST2WEIGHT_RATIO*self.GRAVITY) / (4*self.KF))
-            
-        self.MAX_THRUST = (4*self.KF*self.MAX_RPM**2)
-            
-        if self.DRONE_MODEL in [DroneModel.CF2X, DroneModel.RACE]:
-            self.MAX_XY_TORQUE = (2*self.L*self.KF*self.MAX_RPM**2)/np.sqrt(2)
-        elif self.DRONE_MODEL == DroneModel.CF2P:
-            self.MAX_XY_TORQUE = (self.L*self.KF*self.MAX_RPM**2)
-        
-
-        self.MAX_Z_TORQUE = (2*self.KM*self.MAX_RPM**2)
-
-
-        self.GND_EFF_H_CLIP = 0.25 * self.PROP_RADIUS * np.sqrt((15 * self.MAX_RPM**2 * self.KF * self.GND_EFF_COEFF) / self.MAX_THRUST)
-
-    #### Create attributes for vision tasks ####################
-    # if self.RECORD:
-    #     self.ONBOARD_IMG_PATH = os.path.join(self.OUTPUT_FOLDER, "recording_" + datetime.now().strftime("%m.%d.%Y_%H.%M.%S"))
-    #     os.makedirs(os.path.dirname(self.ONBOARD_IMG_PATH), exist_ok=True)
-    # self.VISION_ATTR = vision_attributes
-    # if self.VISION_ATTR:
-    #     if self.IMG_RES is None:
-    #         self.IMG_RES = np.array([160, 120])
-    #     self.IMG_FRAME_PER_SEC = 24
-    #     self.IMG_CAPTURE_FREQ = int(self.PYB_FREQ/self.IMG_FRAME_PER_SEC)
-    #     self.rgb = np.zeros(((self.NUM_DRONES, self.IMG_RES[1], self.IMG_RES[0], 4)))
-    #     self.dep = np.ones(((self.NUM_DRONES, self.IMG_RES[1], self.IMG_RES[0])))
-    #     self.seg = np.zeros(((self.NUM_DRONES, self.IMG_RES[1], self.IMG_RES[0])))
-    #     if self.IMG_CAPTURE_FREQ%self.PYB_STEPS_PER_CTRL != 0:
-    #         print("[ERROR] in BaseAviary.__init__(), PyBullet and control frequencies incompatible with the desired video capture frame rate ({:f}Hz)".format(self.IMG_FRAME_PER_SEC))
-    #         exit()
-    #     if self.RECORD:
-    #         for i in range(self.NUM_DRONES):
-    #             os.makedirs(os.path.dirname(self.ONBOARD_IMG_PATH+"/drone_"+str(i)+"/"), exist_ok=True)
-
-    def _parseURDFParameters(self):
-        """Loads parameters from an URDF file.
-
-        This method is nothing more than a custom XML parser for the .urdf
-        files in folder `assets/`.
-
-        """
-        URDF_TREE = etxml.parse(pkg_resources.resource_filename('gym_pybullet_drones', 'assets/'+self.URDF)).getroot()
-        self.M = float(URDF_TREE[1][0][1].attrib['value'])
-        self.L = float(URDF_TREE[0].attrib['arm'])
-        self.THRUST2WEIGHT_RATIO = float(URDF_TREE[0].attrib['thrust2weight'])
-        IXX = float(URDF_TREE[1][0][2].attrib['ixx'])
-        IYY = float(URDF_TREE[1][0][2].attrib['iyy'])
-        IZZ = float(URDF_TREE[1][0][2].attrib['izz'])
-        self.J = np.diag([IXX, IYY, IZZ])
-        self.J_INV = np.linalg.inv(J)
-        self.KF = float(URDF_TREE[0].attrib['kf'])
-        self.KM = float(URDF_TREE[0].attrib['km'])
-        self.COLLISION_H = float(URDF_TREE[1][2][1][0].attrib['length'])
-        self.COLLISION_R = float(URDF_TREE[1][2][1][0].attrib['radius'])
-        COLLISION_SHAPE_OFFSETS = [float(s) for s in URDF_TREE[1][2][0].attrib['xyz'].split(' ')]
-        self.COLLISION_Z_OFFSET = COLLISION_SHAPE_OFFSETS[2]
-        self.MAX_SPEED_KMH = float(URDF_TREE[0].attrib['max_speed_kmh'])
-        self.GND_EFF_COEFF = float(URDF_TREE[0].attrib['gnd_eff_coeff'])
-        self.PROP_RADIUS = float(URDF_TREE[0].attrib['prop_radius'])
-        DRAG_COEFF_XY = float(URDF_TREE[0].attrib['drag_coeff_xy'])
-        DRAG_COEFF_Z = float(URDF_TREE[0].attrib['drag_coeff_z'])
-        self.DRAG_COEFF = np.array([DRAG_COEFF_XY, DRAG_COEFF_XY, DRAG_COEFF_Z])
-        self.DW_COEFF_1 = float(URDF_TREE[0].attrib['dw_coeff_1'])
-        self.DW_COEFF_2 = float(URDF_TREE[0].attrib['dw_coeff_2'])
-        self.DW_COEFF_3 = float(URDF_TREE[0].attrib['dw_coeff_3'])
+        return linear_accel, ang_vel, thrust, torques, z_torque
