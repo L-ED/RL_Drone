@@ -4,7 +4,8 @@ import pkg_resources
 
 import numpy as np
 
-from gym_pybullet_drones.utils import State, Device, Control_System
+from gym_pybullet_drones.utils import State
+from gym_pybullet_drones.devices import Device, Control_System
 
 import pybullet as pb
 from gymnasium import spaces
