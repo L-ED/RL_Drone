@@ -280,7 +280,12 @@ class GymCopter(QuadCopter):
         self.GND_EFF_H_CLIP = 0.25 * self.PROP_RADIUS * np.sqrt((15 * self.MAX_RPM**2 * self.KF * self.GND_EFF_COEFF) / self.MAX_THRUST)
 
 
-    def model(self, RPS, env):
+    def model(self, RPS, env, state=None):
+
+        if state is None:
+            state = copy.deepcopy(self.state)
+        
+        future_state = State()
 
         rpm = RPS*60
         forces = np.array(rpm**2)*self.KF
@@ -288,8 +293,6 @@ class GymCopter(QuadCopter):
         if self.drone_model == DroneModel.RACE:
             torques = -torques
         z_torque = (-torques[0] + torques[1] - torques[2] + torques[3])
-    
-        thrust = np.array([0, 0, np.sum(forces)])
 
         if self.DRONE_MODEL in [DroneModel.CF2X, DroneModel.RACE]:
             x_torque = (forces[0] + forces[1] - forces[2] - forces[3]) * (self.L/np.sqrt(2))
@@ -298,17 +301,23 @@ class GymCopter(QuadCopter):
             x_torque = (forces[1] - forces[3]) * self.L
             y_torque = (-forces[0] + forces[2]) * self.L
 
-        axes_torques = np.array([x_torque, y_torque, z_torque])
 
-        angular_accel = np.dot(
+        future_state.local.forces = np.array([0, 0, np.sum(forces)])
+
+        future_state.local.torques = np.array(
+            [x_torque, y_torque, z_torque])
+
+        future_state.local.ang_acc = np.dot(
             self.J_inv,
-            axes_torques - np.cross(
-                self.state.ang_vel,
-                np.dot(self.J, self.state.ang_vel) 
-            )
-        )
+            future_state.local.torques - np.cross(
+                state.local.ang_vel,
+                np.dot(self.J, state.local.ang_vel) 
+            ))
 
-        linear_accel = thrust/self.mass
-        ang_vel += env.timestemp*angular_accel
+        future_state.local.acc = np.array(
+            [0, 0, np.sum(forces)/self.mass])
+        
+        future_state.local.ang_vel += env.timestemp*future_state.local.ang_acc
 
-        return linear_accel, ang_vel, thrust, torques, z_torque
+
+        return future_state #linear_accel, ang_vel, thrust, torques, z_torque
