@@ -127,7 +127,7 @@ class QuadCopter:
         observation_space = {}
         sensors_counter = {}
         for sensor in self.sensors:
-            sensor.set_base(self.ID)
+            sensor.set_base(self)
             name = sensor.name_base + "_" +\
                 str(sensors_counter[sensor.name_base])
             sensor.set_name(name)
@@ -195,7 +195,9 @@ class QuadCopter:
 
         future_state.local.ang_acc = angular_accel
         future_state.local.acc = np.array([0, 0, sum(thrust)/self.mass])
-        future_state.local.ang_vel += env.timestemp*angular_accel
+
+        future_state.local.ang_vel = state.local.ang_vel + angular_accel*env.TIME_STEP
+        future_state.local.vel = state.local.vel + np.array([0, 0, sum(thrust)/self.mass])*env.TIME_STEP
 
         return  future_state
 
@@ -225,6 +227,37 @@ class QuadCopter:
         act = self.compute_action(env.timestemp)
         future_state = self.model(act, env)
         self.apply_force(future_state)
+        self.update_state(future_state)
+
+
+    def update_state(self, new_state):
+        self.state.local.forces = new_state.local.forces
+        self.state.local.torques = new_state.local.torques
+        self.state.local.ang_acc = new_state.local.ang_acc
+        self.state.local.acc = new_state.local.acc 
+
+        lin_vel, ang_vel = pb.getBaseVelocity(self.ID, self.client)
+        pos, qtr = pb.getBasePositionAndOrientation(self.ID, self.client)
+
+        self.state.world.vel = lin_vel
+        self.state.world.ang_vel = ang_vel
+        self.state.world.pos = pos
+        self.state.world.qtr = qtr
+
+        self.state.create_R_matrix()
+
+        local_lin_vel = np.dot(
+            self.state.R.T,
+            lin_vel
+        )
+
+        self.state.local.vel = new_state.local.vel
+        self.state.local.ang_vel = new_state.local.ang_vel
+
+
+        
+
+
         
 
 
