@@ -4,7 +4,7 @@ import pybullet as pb
 
 Inner_state = namedtuple(
     "Inner_state", 
-    ['forces', 'torques', 'vel', 'acc', 'ang_vel', 'ang_acc'],
+    ['force', 'torque', 'vel', 'acc', 'ang_vel', 'ang_acc'],
     defaults=[np.array([0, 0, 0])]*6)
 Outer_State = namedtuple(
     "State", 

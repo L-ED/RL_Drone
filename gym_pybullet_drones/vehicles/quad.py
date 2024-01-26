@@ -5,7 +5,7 @@ import pkg_resources
 import numpy as np
 
 from gym_pybullet_drones.utils import State
-from gym_pybullet_drones.devices import Device, Control_System
+from gym_pybullet_drones.devices import Device
 
 import pybullet as pb
 from gymnasium import spaces
@@ -23,7 +23,6 @@ class QuadCopter:
             filename: str, 
             sensors: List[Device],
             state: State=None, 
-            control_system: Control_System = None
         ):
 
         self.filepath = pkg_resources.resource_filename(
@@ -42,12 +41,9 @@ class QuadCopter:
             dtype=np.float32
         )
         
-        self.load_model(filename)
+        # self.load_model(filename)
         obsSpace = self.load_sensors(sensors)
         self.set_initial_state()
-
-        self.control_system = control_system
-        self.control_system.set_base(self)
 
         return obsSpace, actionSpace
 
@@ -119,6 +115,18 @@ class QuadCopter:
             physicsClientId=self.client
         )
 
+    def reset_state(self, state):
+
+        self.state = state
+
+        pb.resetBasePositionAndOrientation(
+                self.ID,
+                state.world.pos,
+                pb.getQuaternionFromEuler(state.world.ang),
+                physicsClientId=self.client
+            )
+        self.set_initial_state()
+
 
     def load_sensors(self):
         '''
@@ -145,10 +153,6 @@ class QuadCopter:
 
         self._observation = observation
         return observation
-    
-
-    def compute_action(self, timestemp):
-        return self.control_system(self._observation, timestemp)
 
 
     def take_dev_freqs(self):
@@ -156,8 +160,6 @@ class QuadCopter:
         self.freqs = set([
             sensor.freq for sensor in self.sensors 
         ])
-
-        self.freqs.add(self.control_system.freq)
 
 
     def model(self, RPS, env, state=None):
@@ -169,12 +171,13 @@ class QuadCopter:
         # X axis is direction of drone forward movement
         # Y axis directed from right to left side of copter
         # Z axis directed upward from drone botton 
+        RPS = np.clip(RPS, 0 ,self.max_rps)
 
         thrust = self.Ct*env.rho*RPS*self.prop_diam**4
         torque = self.Cq*env.rho*RPS*self.prop_diam**5 
         # CW rotation produces CCW torque
         # motors orientation means rotation direction CW = 1, CCW = -1
-        future_state.local.forces = np.array([0, 0, sum(thrust)])
+        future_state.local.force = np.array([0, 0, sum(thrust)])
 
         moment_z = np.dot(self.motor_orientation, torque)      
         moment_x = self.ly*np.dot([-1, 1, -1, 1], thrust)
@@ -182,7 +185,7 @@ class QuadCopter:
         axes_torques = np.array([
             moment_x, moment_y, moment_z
         ])
-        future_state.local.torques = axes_torques
+        future_state.local.torque = axes_torques
 
         # https://en.wikipedia.org/wiki/Euler%27s_equations_(rigid_body_dynamics)
         angular_accel = np.dot(
@@ -207,7 +210,7 @@ class QuadCopter:
         for i in range(4):
             pb.applyExternalForce(self.ID,
                                  i,
-                                 forceObj=state.local.forces,
+                                 forceObj=state.local.force,
                                  posObj=[0, 0, 0],
                                  flags=pb.LINK_FRAME,
                                  physicsClientId=self.client
@@ -215,24 +218,24 @@ class QuadCopter:
         pb.applyExternalTorque(
             self.ID,
             4,
-            torqueObj=state.local.torques,
+            torqueObj=state.local.torque,
             flags=pb.LINK_FRAME,
             physicsClientId=self.client
         )
 
     
-    def create_step(self, env):
+    def step(self, act, env):
 
         obs = self.compute_observation(env.timestemp)
-        act = self.compute_action(env.timestemp)
         future_state = self.model(act, env)
         self.apply_force(future_state)
         self.update_state(future_state)
+        return obs
 
 
     def update_state(self, new_state):
-        self.state.local.forces = new_state.local.forces
-        self.state.local.torques = new_state.local.torques
+        self.state.local.force = new_state.local.force
+        self.state.local.torque = new_state.local.torque
         self.state.local.ang_acc = new_state.local.ang_acc
         self.state.local.acc = new_state.local.acc 
 
@@ -264,10 +267,10 @@ class QuadCopter:
 
 class GymCopter(QuadCopter):
 
-    def __init__(self, client: int, drone_model: DroneModel, sensors: List, state: State = None, control_system: Control_System = None):
+    def __init__(self, client: int, drone_model: DroneModel, sensors: List, state: State = None):
         self.drone_model = drone_model
         filename = self.drone_model.value + ".urdf"
-        super().__init__(client, filename, sensors, state, control_system)
+        super().__init__(client, filename, sensors, state)
 
 
     def _parseURDF(self):
@@ -336,14 +339,14 @@ class GymCopter(QuadCopter):
             y_torque = (-forces[0] + forces[2]) * self.L
 
 
-        future_state.local.forces = np.array([0, 0, np.sum(forces)])
+        future_state.local.force = np.array([0, 0, np.sum(forces)])
 
-        future_state.local.torques = np.array(
+        future_state.local.torque = np.array(
             [x_torque, y_torque, z_torque])
 
         future_state.local.ang_acc = np.dot(
             self.J_inv,
-            future_state.local.torques - np.cross(
+            future_state.local.torque - np.cross(
                 state.local.ang_vel,
                 np.dot(self.J, state.local.ang_vel) 
             ))
