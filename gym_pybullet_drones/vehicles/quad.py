@@ -4,8 +4,10 @@ import pkg_resources
 
 import numpy as np
 
-from gym_pybullet_drones.utils import State
+from gym_pybullet_drones.utils.state import State
 from gym_pybullet_drones.devices import Device
+
+import xml.etree.ElementTree as etxml
 
 import pybullet as pb
 from gymnasium import spaces
@@ -21,36 +23,70 @@ class QuadCopter:
             self, 
             client: int,  
             filename: str, 
-            sensors: List[Device],
+            sensors: List[Device]=[],
             state: State=None, 
         ):
 
         self.filepath = pkg_resources.resource_filename(
-            'gym_pybullet_drones', 'assets/'+self.filename
+            'gym_pybullet_drones', 'assets/'+filename
         )
+
+        self.motor_orientation=np.array([-1,1, 1, -1])
         
         self.client = client
-        if state is None:
+        self.state = state
+        if self.state is None:
             self.state = State()
+        
+
         self._parseURDF()
 
 
-        actionSpace = spaces.Box(
+        self.actionSpace = spaces.Box(
             low=np.zeros(4),
             high=np.ones(4),
             dtype=np.float32
         )
         
         # self.load_model(filename)
-        obsSpace = self.load_sensors(sensors)
-        self.set_initial_state()
-
-        return obsSpace, actionSpace
+        self.obsSpace = self.load_sensors(sensors)
 
 
     def _parseURDF(self):
-        raise NotImplementedError("No URDF parse in Default class")
+        urdf_tree = etxml.parse(self.filepath).getroot()
+        self.mass = float(urdf_tree[1][0][1].attrib['value'])
 
+        IXX = float(urdf_tree[1][0][2].attrib['ixx'])
+        IYY = float(urdf_tree[1][0][2].attrib['iyy'])
+        IZZ = float(urdf_tree[1][0][2].attrib['izz'])
+        self.J = np.diag([IXX, IYY, IZZ])
+        self.J_inv = np.linalg.inv(self.J)
+
+        self.L = float(urdf_tree[0].attrib['arm'])
+
+        self.lx, self.ly = [
+            abs(float(x)) for x in 
+            urdf_tree[2][0][0].attrib['xyz'].split()[:2]
+        ]
+
+        self.Ct = float(urdf_tree[0].attrib['kf'])
+        self.Cq = float(urdf_tree[0].attrib['km'])
+        self.COLLISION_H = float(urdf_tree[1][2][1][0].attrib['length'])
+        self.COLLISION_R = float(urdf_tree[1][2][1][0].attrib['radius'])
+        COLLISION_SHAPE_OFFSETS = [float(s) for s in urdf_tree[1][2][0].attrib['xyz'].split(' ')]
+        self.COLLISION_Z_OFFSET = COLLISION_SHAPE_OFFSETS[2]
+
+        self.GND_EFF_COEFF = float(urdf_tree[0].attrib['gnd_eff_coeff'])
+        self.prop_diam = float(urdf_tree[0].attrib['prop_radius'])*2
+        DRAG_COEFF_XY = float(urdf_tree[0].attrib['drag_coeff_xy'])
+        DRAG_COEFF_Z = float(urdf_tree[0].attrib['drag_coeff_z'])
+        self.DRAG_COEFF = np.array([DRAG_COEFF_XY, DRAG_COEFF_XY, DRAG_COEFF_Z])
+        self.DW_COEFF_1 = float(urdf_tree[0].attrib['dw_coeff_1'])
+        self.DW_COEFF_2 = float(urdf_tree[0].attrib['dw_coeff_2'])
+        self.DW_COEFF_3 = float(urdf_tree[0].attrib['dw_coeff_3'])
+
+        self.THRUST2WEIGHT_RATIO = float(urdf_tree[0].attrib['thrust2weight'])
+        self.max_rps = np.sqrt((self.THRUST2WEIGHT_RATIO*9.8) / (4*self.Ct))/60
 
     def load_model(self):
 
@@ -61,7 +97,7 @@ class QuadCopter:
                 self.filepath,
                 state.pos,
                 pb.getQuaternionFromEuler(
-                    state.ang
+                    state.rpy
                 ), #pb.getQuaternionFromEuler(self.INIT_RPYS),
                 flags = (
                     pb.URDF_USE_INERTIA_FROM_FILE | \
@@ -79,7 +115,7 @@ class QuadCopter:
             pb.resetBasePositionAndOrientation(
                 self.ID,
                 state.pos,
-                pb.getQuaternionFromEuler(state.ang),
+                pb.getQuaternionFromEuler(state.rpy),
                 physicsClientId=self.client
             )
 
@@ -128,19 +164,26 @@ class QuadCopter:
         self.set_initial_state()
 
 
-    def load_sensors(self):
+    def load_sensors(self, sensors):
         '''
         Parse sensors configs from URDF or SDF file and add to sensors list
         '''
+        self.sensors = sensors
         observation_space = {}
         sensors_counter = {}
-        for sensor in self.sensors:
-            sensor.set_base(self)
-            name = sensor.name_base + "_" +\
-                str(sensors_counter[sensor.name_base])
-            sensor.set_name(name)
+        for sensor in sensors:
+            sensor.base=self
+            basename = sensor.name_base
+            if basename not in sensors_counter:
+                sensors_counter[basename]=0
+            else:
+                sensors_counter[basename]+=1
 
-            observation_space[sensor.name].append(sensor.observation_space)
+            name = sensor.name_base + "_" +\
+                str(sensors_counter[basename])
+            sensor.name=name
+
+            observation_space[sensor.name]=sensor.observation_space
 
         return spaces.Dict(observation_space)
     
@@ -157,9 +200,9 @@ class QuadCopter:
 
     def take_dev_freqs(self):
 
-        self.freqs = set([
+        return list(set([
             sensor.freq for sensor in self.sensors 
-        ])
+        ]))
 
 
     def model(self, RPS, env, state=None):
@@ -199,29 +242,30 @@ class QuadCopter:
         future_state.local.ang_acc = angular_accel
         future_state.local.acc = np.array([0, 0, sum(thrust)/self.mass])
 
-        future_state.local.ang_vel = state.local.ang_vel + angular_accel*env.TIME_STEP
-        future_state.local.vel = state.local.vel + np.array([0, 0, sum(thrust)/self.mass])*env.TIME_STEP
+        future_state.local.ang_vel = state.local.ang_vel + angular_accel*env.timestep
+        future_state.local.vel = state.local.vel + np.array([0, 0, sum(thrust)/self.mass])*env.timestep
 
         return  future_state
 
         
     def apply_force(self, state):
 
-        for i in range(4):
-            pb.applyExternalForce(self.ID,
-                                 i,
-                                 forceObj=state.local.force,
-                                 posObj=[0, 0, 0],
-                                 flags=pb.LINK_FRAME,
-                                 physicsClientId=self.client
-                                 )
-        pb.applyExternalTorque(
-            self.ID,
-            4,
-            torqueObj=state.local.torque,
-            flags=pb.LINK_FRAME,
-            physicsClientId=self.client
-        )
+        pass
+        # for i in range(4):
+        #     pb.applyExternalForce(self.ID,
+        #                          i,
+        #                          forceObj=state.local.force.tolist(),
+        #                          posObj=[0, 0, 0],
+        #                          flags=pb.LINK_FRAME,
+        #                          physicsClientId=self.client
+        #                          )
+        # pb.applyExternalTorque(
+        #     self.ID,
+        #     4,
+        #     torqueObj=state.local.torque,
+        #     flags=pb.LINK_FRAME,
+        #     physicsClientId=self.client
+        # )
 
     
     def step(self, act, env):
@@ -358,3 +402,7 @@ class GymCopter(QuadCopter):
 
 
         return future_state #linear_accel, ang_vel, thrust, torques, z_torque
+
+
+# def get_default():
+#     return 

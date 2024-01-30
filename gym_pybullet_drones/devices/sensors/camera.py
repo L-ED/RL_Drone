@@ -1,13 +1,16 @@
 from gym_pybullet_drones.devices import Device
-from gym_pybullet_drones.vehicles import QuadCopter
+# from gym_pybullet_drones.vehicles.quad import QuadCopter
 import numpy as np
 import pybullet as pb
 from typing import List, Tuple
 import numpy as np
+from gymnasium import spaces
 
 
 class Camera(Device):
-    def __init__(self, image_size: List[int], fov: int, displ: np.ndarray, frequency: float, base: QuadCopter =None) -> None:
+    name_base = 'camera'
+
+    def __init__(self, image_size: List[int], fov: int, displ: np.ndarray, frequency: float, base = None) -> None:
         '''
             image_size in W, H 
             fov(Field of view) assumed to be vertical in degrees
@@ -21,9 +24,16 @@ class Camera(Device):
         # https://stackoverflow.com/questions/60430958/understanding-the-view-and-projection-matrix-from-pybullet
         self.aspect_ratio = image_size[0]/image_size[1]
          
+        self.observation_space = spaces.Tuple(
+            (
+                spaces.Box(low=-np.inf, high=np.inf, shape=(self.image_size[1], self.image_size[0], 4)),
+                spaces.Box(low=-np.inf, high=np.inf, shape=(self.image_size[1], self.image_size[0])),
+                spaces.Box(low=-np.inf, high=np.inf, shape=(self.image_size[1], self.image_size[0]))
+            )
+        )
 
 
-    def make_obs(self) -> Tuple(np.ndarray):
+    def make_obs(self) -> Tuple[np.ndarray]:
 
         pos, quat = pb.getBasePositionAndOrientation(
             self.base.ID, physicsClientId=self.base.client)

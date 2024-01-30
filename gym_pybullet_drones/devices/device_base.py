@@ -11,7 +11,7 @@ class Device:
         self.freq = frequency
         self.last_obs = None
         self._base = base
-
+        self._name = None
     
     def __call__(self, timestemp) -> Any:
         if self._base is None:
@@ -26,5 +26,26 @@ class Device:
         pass
 
     @property
+    def base(self):
+        return self._base
+
+    @base.setter
     def base(self, base):
         self._base = base
+
+    @base.deleter
+    def base(self):
+        del self._base
+
+    
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, name):
+        self._name = name
+
+    @name.deleter
+    def name(self):
+        del self._name

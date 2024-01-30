@@ -497,9 +497,9 @@ class BaseAviary(gym.Env):
         #     p.changeDynamics(self.DRONE_IDS[i], -1, linearDamping=0, angularDamping=0)
         #### Show the frame of reference of the drone, note that ###
         #### It severly slows down the GUI #########################
-        if self.GUI and self.USER_DEBUG:
-            for i in range(self.NUM_DRONES):
-                self._showDroneLocalAxes(i)
+        # if self.GUI and self.USER_DEBUG:
+        for i in range(self.NUM_DRONES):
+            self._showDroneLocalAxes(i)
         #### Disable collisions between drones' and the ground plane
         #### E.g., to start a drone at [0,0,0] #####################
         # for i in range(self.NUM_DRONES):

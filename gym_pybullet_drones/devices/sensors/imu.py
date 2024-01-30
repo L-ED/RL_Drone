@@ -1,13 +1,20 @@
 from gym_pybullet_drones.devices import Device
 import numpy as np
 import pybullet as pb
+from gymnasium import spaces
 
 class IMU(Device):
+    name_base = 'IMU'
+
     def __init__(self, frequency, accel_params, gyro_params, base=None) -> None:
         super().__init__(frequency, base)
 
-        accel_params['sample_time'] = 1/self.frequency
-        gyro_params['sample_time'] = 1/self.frequency
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(1, 3)
+        )
+
+        accel_params['sample_time'] = 1/self.freq
+        gyro_params['sample_time'] = 1/self.freq
 
         self.acc_noize = SensorNoizeModel(
             **accel_params
@@ -15,7 +22,6 @@ class IMU(Device):
         self.gyro_noize = SensorNoizeModel(
             **gyro_params
         )
-
 
     def make_obs(self):
 
@@ -72,7 +78,7 @@ def mpu6000(base=None): #spi(low) - 100kHZ, spi(high) - 1MHZ, SPI(readonly) - 20
     }
 
     return IMU(
-        frequency= 100*1e3,
+        frequency= int(100*1e3),
         accel_params=accel,
         gyro_params=gyro,
         base=base
