@@ -6,6 +6,8 @@ from typing import List, Tuple
 import numpy as np
 from gymnasium import spaces
 
+from matplotlib import pyplot as plt
+
 
 class Camera(Device):
     name_base = 'camera'
@@ -32,11 +34,19 @@ class Camera(Device):
             )
         )
 
+        plt.figure()
+        self.plt_im = plt.imshow(np.zeros((image_size[1],image_size[0],4)))
+        plt.axis('off')
+        plt.tight_layout(pad=0)
+
 
     def make_obs(self) -> Tuple[np.ndarray]:
 
-        pos, quat = pb.getBasePositionAndOrientation(
-            self.base.ID, physicsClientId=self.base.client)
+        # pos, quat = pb.getBasePositionAndOrientation(
+        #     self.base.ID, physicsClientId=self.base.client)
+
+        pos = self._base.state.world.pos
+        quat = self._base.state.world.qtr
 
         rot_mat = np.array(
             pb.getMatrixFromQuaternion(quat)
@@ -54,7 +64,7 @@ class Camera(Device):
         proj_mat = pb.computeProjectionMatrixFOV(
             fov=self.fov,
             aspect=self.aspect_ratio,
-            nearVal=0.1,
+            nearVal=0.01,
             farVal=1000.0
         )
 
@@ -73,4 +83,39 @@ class Camera(Device):
         dep = np.reshape(dep, (self.image_size[1], self.image_size[0]))
         seg = np.reshape(seg, (self.image_size[1], self.image_size[0]))
 
+        self.plt_im.set_array(rgb)
+        plt.gca().set_aspect(self.image_size[1]/self.image_size[0])
+        plt.draw()
+
         return (rgb, seg, dep)
+    
+
+    def visualize(self):
+        print("CAM VIS")
+
+        # camera_vis_id = pb.createVisualShape(pb.GEOM_BOX,
+        #                                  halfExtents=[0.02, 0.02, 0.02],
+        #                                  rgbaColor=[1,0,0,0.7])
+        # camera_body = pb.createMultiBody(0, -1, camera_vis_id)
+
+        # to_axs = self.displ
+        # to_axs[0] += 10
+        # ax_idx = pb.addUserDebugLine(
+        #     lineFromXYZ=self.displ,
+        #     lineToXYZ=to_axs,
+        #     lineColorRGB=[1, 0, 0],
+        #     parentObjectUniqueId=self._base.ID,
+        #     parentLinkIndex=-1,
+        #     replaceItemUniqueId=-1,
+        #     physicsClientId=self._base.client
+        # )
+
+        # ax_idx = pb.addUserDebugLine(
+        #     lineFromXYZ=[0, 0, 0.02],
+        #     lineToXYZ=[0.04, 0, 0.04],
+        #     lineColorRGB=[1, 0, 1],
+        #     parentObjectUniqueId=self._base.ID,
+        #     parentLinkIndex=-1,
+        #     replaceItemUniqueId=-1,
+        #     physicsClientId=self._base.client
+        # )

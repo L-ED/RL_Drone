@@ -9,6 +9,8 @@ class IMU(Device):
     def __init__(self, frequency, accel_params, gyro_params, base=None) -> None:
         super().__init__(frequency, base)
 
+        self.G=9.8
+
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(1, 3)
         )
@@ -26,7 +28,7 @@ class IMU(Device):
     def make_obs(self):
 
         local_g = np.dot(
-            self._base.state.inv_R,
+            self._base.state.R.T,
             np.array([0, 0, -self.G]))
         
         acc = self.acc_noize.step(self._base.state.local.acc + local_g)

@@ -9,41 +9,41 @@ from math import gcd
 
 class Base(gym.Env):
 
-    def __init__(self, client, drone, control_system, logger=None, scene_objects=[], visualize=True, record=False, realtime=False):
+    def __init__(self, client, drone, control_system=None, logger=None, scene_objects=[], visualize=True, record=False, realtime=False):
+
         G=9.8
         self.rho = 1.
-
-
         self.drone = drone
+        self.control_system = control_system
         self.client = client
-        devs_freqs = drone.take_dev_freqs() 
 
-        self.min_frequency = 240
-        if len(devs_freqs)>0:
-            self.min_frequency = self.find_lcm(
-                drone.take_dev_freqs()#.append(control_system.frequency)
-                )
+        self.find_env_frequency(realtime)
 
         self.add_objects(scene_objects, drone)
 
         pb.setGravity(0, 0, -G, physicsClientId=self.client)
         pb.setRealTimeSimulation(realtime, self.client) # diesnt work in DIRECT
-        if not realtime:
-            pb.setTimeStep(1/self.min_frequency)
-            self.timestep = 1/self.min_frequency
+
         self.step_idx=0
         self.timestemp = 0
 
         self.action_space = self.drone.actionSpace
         self.observation_space = self.drone.obsSpace
 
+        self.X_AX = -1
+        self.Y_AX = -1
+        self.Z_AX = -1
+
+        if visualize:
+            self.showDroneLocalAxes()
+            self.drone.visualize_sensors()
+
 
     def step(self, action: Any) -> Tuple[
             Any, SupportsFloat, bool, bool, Dict[str, Any]]:
         
         pb.stepSimulation(self.client)
-        # obs = self.drone.step(action, self)
-        obs=None
+        obs = self.drone.step(action, self)
         reward = self.reward()
         terminated = self.check_termination()
         truncated = self.check_truncation()
@@ -70,16 +70,13 @@ class Base(gym.Env):
         state=self.drone.state
         wrld, loc = state.world, state.local
 
-        msg = f"Step {self.step_idx} {self.timestemp}\n"+ \
+        msg = f"Step {self.step_idx} {np.round(self.timestep*self.step_idx, 4)}\n"+ \
         "WORLD FRAME\n"+\
-        f"pos {wrld.pos} rpy {wrld.rpy}"+ \
-        f"vel {wrld.vel} ang_vel {wrld.ang_vel}\n"+ \
-        f"acc {wrld.acc} ang_acc {wrld.ang_acc}\n"+\
-        f"force {wrld.force} torque {wrld.torque}\n"+\
+        f"pos {np.round(wrld.pos, 4)} rpy {np.round(wrld.rpy, 4)} vel {np.round(wrld.vel, 4)} ang_vel {np.round(wrld.ang_vel, 4)}\n"+ \
+        f"acc {np.round(wrld.acc, 4)} ang_acc {np.round(wrld.ang_acc, 4)} force {np.round(wrld.force, 4)} torque {np.round(wrld.torque, 4)}\n"+\
         "LOCAL FRAME\n"+\
-        f"vel {loc.vel} ang_vel {loc.ang_vel}\n"+ \
-        f"acc {loc.acc} ang_acc {loc.ang_acc}\n"+\
-        f"force {loc.force} torque {loc.torque}\n"
+        f"vel {np.round(loc.vel, 4)} ang_vel {np.round(loc.ang_vel, 4)}\n"+ \
+        f"acc {np.round(loc.acc, 4)} ang_acc {np.round(loc.ang_acc, 4)} force {np.round(loc.force, 4)} torque {np.round(loc.torque, 4)}\n"
 
         print(msg)
 
@@ -92,6 +89,26 @@ class Base(gym.Env):
 
         pb.setAdditionalSearchPath(pybullet_data.getDataPath(), physicsClientId=self.client)
         self.plane_id = pb.loadURDF("plane.urdf", physicsClientId=self.client)
+
+         # """
+        # p.loadURDF("samurai.urdf",
+        #            physicsClientId=self.CLIENT
+        #            )
+        pb.loadURDF("duck_vhacd.urdf",
+                   [-.5, -.5, .05],
+                   pb.getQuaternionFromEuler([0, 0, 0]),
+                   physicsClientId=self.client
+                   )
+        pb.loadURDF("cube_no_rotation.urdf",
+                   [10.5, -2.5, .5],
+                   pb.getQuaternionFromEuler([0, 0, 0]),
+                   physicsClientId=self.client
+                   )
+        pb.loadURDF("sphere2.urdf",
+                   [0, 2, .5],
+                   pb.getQuaternionFromEuler([0,0,0]),
+                   physicsClientId=self.client
+                   )
 
         for obj in scene_obj:
             state = obj['state']
@@ -136,3 +153,63 @@ class Base(gym.Env):
             lcm = lcm*freq//gcd(lcm, freq)
 
         return lcm
+    
+
+    def showDroneLocalAxes(self):
+        """Draws the local frame of the n-th drone in PyBullet's GUI.
+
+        Parameters
+        ----------
+        nth_drone : int
+            The ordinal number/position of the desired drone in list self.DRONE_IDS.
+
+        """
+        AXIS_LENGTH = 2*self.drone.L
+        print("AXS", AXIS_LENGTH)
+        self.X_AX = pb.addUserDebugLine(
+            lineFromXYZ=[0, 0, 0],
+            lineToXYZ=[AXIS_LENGTH, 0, 0],
+            lineColorRGB=[1, 0, 0],
+            parentObjectUniqueId=self.drone.ID,
+            parentLinkIndex=-1,
+            replaceItemUniqueId=int(self.X_AX),
+            physicsClientId=self.client
+        )
+
+        self.Y_AX = pb.addUserDebugLine(
+            lineFromXYZ=[0, 0, 0],
+            lineToXYZ=[0, AXIS_LENGTH, 0],
+            lineColorRGB=[0, 1, 0],
+            parentObjectUniqueId=self.drone.ID,
+            parentLinkIndex=-1,
+            replaceItemUniqueId=int(self.Y_AX),
+            physicsClientId=self.client
+        )
+
+        self.Z_AX = pb.addUserDebugLine(
+            lineFromXYZ=[0, 0, 0],
+            lineToXYZ=[0, 0, AXIS_LENGTH],
+            lineColorRGB=[0, 0, 1],
+            parentObjectUniqueId=self.drone.ID,
+            parentLinkIndex=-1,
+            replaceItemUniqueId=int(self.Z_AX),
+            physicsClientId=self.client
+        )
+
+    
+    def find_env_frequency(self, realtime):
+
+        devs_freqs = self.drone.take_dev_freqs() 
+        if self.control_system is not None:
+            devs_freqs.append(self.control_system.freq)
+
+        self.min_frequency = 240
+        if len(devs_freqs)>0:
+            self.min_frequency = self.find_lcm(devs_freqs)
+
+        if not realtime:
+            pb.setTimeStep(1/self.min_frequency)
+            self.timestep = 1/self.min_frequency
+
+        self.drone.set_sensor_ticks(self.min_frequency)
+        

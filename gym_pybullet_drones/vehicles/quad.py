@@ -101,7 +101,7 @@ class QuadCopter:
                 ), #pb.getQuaternionFromEuler(self.INIT_RPYS),
                 flags = (
                     pb.URDF_USE_INERTIA_FROM_FILE | \
-                    pb.URDF_MERGE_FIXED_LINKS | \
+                    # pb.URDF_MERGE_FIXED_LINKS | \
                     pb.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
                 ),
                 physicsClientId=self.client
@@ -185,7 +185,7 @@ class QuadCopter:
 
             observation_space[sensor.name]=sensor.observation_space
 
-        return spaces.Dict(observation_space)
+        self.obsSpace = spaces.Dict(observation_space)
     
     
     def compute_observation(self, timestemp):
@@ -250,22 +250,22 @@ class QuadCopter:
         
     def apply_force(self, state):
 
-        pass
-        # for i in range(4):
-        #     pb.applyExternalForce(self.ID,
-        #                          i,
-        #                          forceObj=state.local.force.tolist(),
-        #                          posObj=[0, 0, 0],
-        #                          flags=pb.LINK_FRAME,
-        #                          physicsClientId=self.client
-        #                          )
-        # pb.applyExternalTorque(
-        #     self.ID,
-        #     4,
-        #     torqueObj=state.local.torque,
-        #     flags=pb.LINK_FRAME,
-        #     physicsClientId=self.client
-        # )
+        # pass
+        for i in range(4):
+            pb.applyExternalForce(self.ID,
+                                 i,
+                                 forceObj=state.local.force.tolist(),
+                                 posObj=[0, 0, 0],
+                                 flags=pb.LINK_FRAME,
+                                 physicsClientId=self.client
+                                 )
+        pb.applyExternalTorque(
+            self.ID,
+            4,
+            torqueObj=state.local.torque,
+            flags=pb.LINK_FRAME,
+            physicsClientId=self.client
+        )
 
     
     def step(self, act, env):
@@ -291,8 +291,6 @@ class QuadCopter:
         self.state.world.pos = pos
         self.state.world.qtr = qtr
 
-        self.state.create_R_matrix()
-
         local_lin_vel = np.dot(
             self.state.R.T,
             lin_vel
@@ -302,10 +300,14 @@ class QuadCopter:
         self.state.local.ang_vel = new_state.local.ang_vel
 
 
-        
+    def set_sensor_ticks(self, env_freq):
+        for sensor in self.sensors:
+            sensor.set_tick(env_freq)
 
 
-        
+    def visualize_sensors(self):
+        for sensor in self.sensors:
+            sensor.visualize()
 
 
 

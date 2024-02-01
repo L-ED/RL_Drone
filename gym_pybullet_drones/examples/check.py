@@ -17,7 +17,7 @@ def run():
         Camera(
             image_size = [640, 480],
             fov= 60,
-            displ = np.array([0, 0, 10]),
+            displ = np.array([0, 0, 0.1]),
             frequency = 60
         ),
         mpu6000()
@@ -28,7 +28,7 @@ def run():
 
     drone = QuadCopter(
         client=client,
-        filename= 'cf2x.urdf',
+        filename= 'cf2x_cam.urdf',
         # sensors = [],
         sensors = sensors,
         state=state
@@ -40,10 +40,15 @@ def run():
         control_system=None
     )
 
+    # camera_vis_id = pb.createVisualShape(pb.GEOM_BOX,
+    #                                      halfExtents=[0.02, 0.02, 0.02],
+    #                                      rgbaColor=[1,0,0,0.7])
+    # camera_body = pb.createMultiBody(0, -1, camera_vis_id)
+
     # START = time.time()
     print(env.timestep)
     while True:
         _ = env.step(np.array([0,0,0,0]))
-        env.render()
-        time.sleep(env.timestep)
+        # env.render()
+        # time.sleep(env.timestep)
 run()

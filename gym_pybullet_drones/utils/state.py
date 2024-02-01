@@ -2,6 +2,7 @@ from collections import namedtuple
 import numpy as np
 import pybullet as pb
 from dataclasses import dataclass, field
+from functools import cache
 
 # Inner_state = namedtuple(
 #     "Inner_state", 
@@ -27,6 +28,7 @@ class Inner_state:
 class Outer_State(Inner_state):
     pos: np.array = field(default_factory= lambda:np.array([0, 0, 0]))
     rpy: np.array = field(default_factory= lambda: np.array([0, 0, 0]))
+    qtr: np.array = field(default_factory= lambda: np.array([0, 0, 0, 0]))
 
 
 class State:
@@ -34,13 +36,16 @@ class State:
     def __init__(self) -> None:
         self.world = Outer_State()
         self.local = Inner_state()
-        self.R = None
-        self.T = None
 
-    def create_R_matrix(self):
-
-        self.R = np.array(pb.getMatrixFromQuaternion(
-            self.world.qtr
-        )).reshape((3,3))
-        self.inv_R = self.R.T
+    @property
+    def R(self):
+        return self.compute_R(self.world.qtr)  
+    
+    # @cache
+    def compute_R(self, quaternion): 
+        return np.array(
+                pb.getMatrixFromQuaternion(
+                    quaternion
+            )
+        ).reshape((3,3))
     
