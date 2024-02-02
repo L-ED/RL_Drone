@@ -24,7 +24,7 @@ def run():
         ]
 
     state = State()
-    state.world.pos[2] = 1
+    state.world.pos[2] += 0.1
 
     drone = QuadCopter(
         client=client,

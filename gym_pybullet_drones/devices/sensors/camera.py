@@ -7,7 +7,7 @@ import numpy as np
 from gymnasium import spaces
 
 from matplotlib import pyplot as plt
-
+from copy import deepcopy
 
 class Camera(Device):
     name_base = 'camera'
@@ -98,17 +98,20 @@ class Camera(Device):
         #                                  rgbaColor=[1,0,0,0.7])
         # camera_body = pb.createMultiBody(0, -1, camera_vis_id)
 
-        # to_axs = self.displ
-        # to_axs[0] += 10
-        # ax_idx = pb.addUserDebugLine(
-        #     lineFromXYZ=self.displ,
-        #     lineToXYZ=to_axs,
-        #     lineColorRGB=[1, 0, 0],
-        #     parentObjectUniqueId=self._base.ID,
-        #     parentLinkIndex=-1,
-        #     replaceItemUniqueId=-1,
-        #     physicsClientId=self._base.client
-        # )
+        from_ = deepcopy(self.displ) 
+        # from_[2] += 0.01
+
+        to_ = deepcopy(from_)
+        to_[0] += 0.02
+        ax_idx = pb.addUserDebugLine(
+            lineFromXYZ=from_,
+            lineToXYZ=to_,
+            lineColorRGB=[1, 0, 1],
+            parentObjectUniqueId=self._base.ID,
+            parentLinkIndex=-1,
+            replaceItemUniqueId=-1,
+            physicsClientId=self._base.client
+        )
 
         # ax_idx = pb.addUserDebugLine(
         #     lineFromXYZ=[0, 0, 0.02],

@@ -16,19 +16,19 @@ from functools import cache
 
 @dataclass
 class Inner_state:
-    force: np.array = field(default_factory= lambda: np.array([0, 0, 0]))
-    torque: np.array = field(default_factory= lambda: np.array([0, 0, 0]))
-    vel: np.array = field(default_factory= lambda:np.array([0, 0, 0]))
-    acc: np.array = field(default_factory= lambda:np.array([0, 0, 0]))
-    ang_vel: np.array = field(default_factory= lambda:np.array([0, 0, 0]))
-    ang_acc: np.array = field(default_factory= lambda:np.array([0, 0, 0]))
+    force: np.array = field(default_factory= lambda: np.array([0, 0, 0], dtype=np.float64))
+    torque: np.array = field(default_factory= lambda: np.array([0, 0, 0], dtype=np.float64))
+    vel: np.array = field(default_factory= lambda:np.array([0, 0, 0], dtype=np.float64))
+    acc: np.array = field(default_factory= lambda:np.array([0, 0, 0], dtype=np.float64))
+    ang_vel: np.array = field(default_factory= lambda:np.array([0, 0, 0], dtype=np.float64))
+    ang_acc: np.array = field(default_factory= lambda:np.array([0, 0, 0], dtype=np.float64))
 
 
 @dataclass
 class Outer_State(Inner_state):
-    pos: np.array = field(default_factory= lambda:np.array([0, 0, 0]))
-    rpy: np.array = field(default_factory= lambda: np.array([0, 0, 0]))
-    qtr: np.array = field(default_factory= lambda: np.array([0, 0, 0, 0]))
+    pos: np.array = field(default_factory= lambda:np.array([0, 0, 0], dtype=np.float64))
+    rpy: np.array = field(default_factory= lambda: np.array([0, 0, 0], dtype=np.float64))
+    qtr: np.array = field(default_factory= lambda: np.array([0, 0, 0, 0], dtype=np.float64))
 
 
 class State:
