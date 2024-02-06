@@ -19,9 +19,9 @@
     </links -->
 
     <visual>
-      <origin rpy="0 0 95" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="./cf2.dae" scale=" 1 1 1"/>
+        <mesh filename="./drone_normal_zup.obj" scale=" 0.001 0.001 0.001"/>
       </geometry> 
       <material name="grey">
         <color rgba=".5 .5 .5 1"/>

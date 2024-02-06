@@ -28,7 +28,7 @@ def run():
 
     drone = QuadCopter(
         client=client,
-        filename= 'cf2x_cam.urdf',
+        filename= 'custom.urdf',#'cf2x_cam.urdf',
         # sensors = [],
         sensors = sensors,
         state=state
