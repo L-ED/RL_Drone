@@ -11,7 +11,7 @@ class Base(gym.Env):
 
     def __init__(self, client, drone, control_system=None, logger=None, scene_objects=[], visualize=True, record=False, realtime=False):
 
-        G=9.8
+        self.G=9.8
         self.rho = 1.
         self.drone = drone
         self.control_system = control_system
@@ -21,7 +21,7 @@ class Base(gym.Env):
 
         self.add_objects(scene_objects, drone)
 
-        pb.setGravity(0, 0, -G, physicsClientId=self.client)
+        pb.setGravity(0, 0, -self.G, physicsClientId=self.client)
         pb.setRealTimeSimulation(realtime, self.client) # diesnt work in DIRECT
 
         self.step_idx=0
@@ -62,7 +62,7 @@ class Base(gym.Env):
         self.drone.reset_state(state)
         action = self.create_initial_action()
         obs = self.drone.step(action)
-        return obs
+        return obs, None
     
 
     def render(self):

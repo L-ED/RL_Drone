@@ -12,7 +12,7 @@ class IMU(Device):
         self.G=9.8
 
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(1, 3)
+            low=-np.inf, high=np.inf, shape=(1, 6)
         )
 
         accel_params['sample_time'] = 1/self.freq
@@ -34,7 +34,7 @@ class IMU(Device):
         acc = self.acc_noize.step(self._base.state.local.acc + local_g)
         ang_vel = self.gyro_noize.step(self._base.state.local.ang_vel)
         
-        return acc, ang_vel
+        return np.concatenate(acc, ang_vel)
     
 
 # https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model

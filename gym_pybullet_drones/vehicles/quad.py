@@ -185,7 +185,7 @@ class QuadCopter:
 
             observation_space[sensor.name]=sensor.observation_space
 
-        self.obsSpace = spaces.Dict(observation_space)
+        return spaces.Dict(observation_space)
     
     
     def compute_observation(self, timestemp):

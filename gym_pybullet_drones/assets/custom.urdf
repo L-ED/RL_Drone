@@ -8,8 +8,8 @@
 
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
-      <mass value="0.027"/>
-      <inertia ixx="2.3951e-5" ixy="0.0" ixz="0.0" iyy="2.3951e-5" iyz="0.0" izz="3.2347e-5"/>
+      <mass value="0.725977"/>
+      <inertia ixx="2.480604646e-3" ixy="-2.003701e-6" ixz="0.05951942e-3" iyy="2.507424636e-3" iyz="0.576004e-6" izz="4.232598450e-3"/>
     </inertial>
 
     <!-- links>
@@ -32,6 +32,7 @@
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
         <cylinder radius=".06" length=".025"/>
+        <!-- <mesh filename="./drone_normal_zup.obj" scale=" 0.001 0.001 0.001"/> -->
       </geometry>
     </collision>  
 
