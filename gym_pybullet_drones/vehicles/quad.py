@@ -19,6 +19,23 @@ import copy
 
 class QuadCopter:
 
+    '''
+      ____          ____
+     /    \        /    \
+    |  CW  |      | CCW  |
+     \____/ 4      \____/ 2
+
+              /\
+             /  \
+      ____          ____
+     /    \        /    \
+    | CCW  |      |  CW  |
+     \____/ 3      \____/ 1          x
+                                     |
+                                y ___|
+    '''
+
+
     def __init__(
             self, 
             client: int,  
@@ -31,7 +48,8 @@ class QuadCopter:
             'gym_pybullet_drones', 'assets/'+filename
         )
 
-        self.motor_orientation=np.array([-1,1, 1, -1])
+        # ccw is plus, cw minus
+        self.motor_orientation=np.array([1,-1, -1, 1])
         
         self.client = client
         self.state = state
@@ -158,7 +176,7 @@ class QuadCopter:
         pb.resetBasePositionAndOrientation(
                 self.ID,
                 state.world.pos,
-                pb.getQuaternionFromEuler(state.world.ang),
+                pb.getQuaternionFromEuler(state.world.rpy),
                 physicsClientId=self.client
             )
         self.set_initial_state()
@@ -223,8 +241,8 @@ class QuadCopter:
         future_state.local.force = np.array([0, 0, sum(thrust)])
 
         moment_z = np.dot(self.motor_orientation, torque)      
-        moment_x = self.ly*np.dot([-1, 1, -1, 1], thrust)
-        moment_y = self.lx*np.dot([-1, -1, 1, 1], thrust)
+        moment_x = self.ly*np.dot([-1, -1, 1, 1], thrust)
+        moment_y = self.lx*np.dot([1, -1, 1, -1], thrust)
         axes_torques = np.array([
             moment_x, moment_y, moment_z
         ])
@@ -240,7 +258,7 @@ class QuadCopter:
         )
 
         future_state.local.ang_acc = angular_accel
-        future_state.local.acc = np.array([0, 0, sum(thrust)/self.mass])
+        future_state.local.acc = np.array([0, 0, sum(thrust)/self.mass]) 
 
         future_state.local.ang_vel = state.local.ang_vel + angular_accel*env.timestep
         future_state.local.vel = state.local.vel + np.array([0, 0, sum(thrust)/self.mass])*env.timestep
@@ -262,7 +280,7 @@ class QuadCopter:
         pb.applyExternalTorque(
             self.ID,
             4,
-            torqueObj=state.local.torque,
+            torqueObj=[0, 0, state.local.torque[2]],
             flags=pb.LINK_FRAME,
             physicsClientId=self.client
         )
@@ -270,10 +288,10 @@ class QuadCopter:
     
     def step(self, act, env):
 
-        obs = self.compute_observation(env.timestemp)
         future_state = self.model(act, env)
         self.apply_force(future_state)
         self.update_state(future_state)
+        obs = self.compute_observation(env.timestemp)
         return obs
 
 
@@ -291,13 +309,13 @@ class QuadCopter:
         self.state.world.pos = pos
         self.state.world.qtr = qtr
 
-        local_lin_vel = np.dot(
-            self.state.R.T,
-            lin_vel
-        )
+        # local_lin_vel = np.dot(
+        #     self.state.R.T,
+        #     lin_vel
+        # )
 
-        self.state.local.vel = new_state.local.vel
-        self.state.local.ang_vel = new_state.local.ang_vel
+        self.state.local.vel = np.dot(self.state.R.T, lin_vel)#new_state.local.vel
+        self.state.local.ang_vel = np.dot(self.state.R.T, ang_vel)#new_state.local.ang_vel
 
 
     def set_sensor_ticks(self, env_freq):

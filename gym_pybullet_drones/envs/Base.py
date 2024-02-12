@@ -211,5 +211,6 @@ class Base(gym.Env):
             pb.setTimeStep(1/self.min_frequency)
             self.timestep = 1/self.min_frequency
 
+        print("Frequency ", self.min_frequency)
         self.drone.set_sensor_ticks(self.min_frequency)
         

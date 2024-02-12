@@ -34,7 +34,7 @@ class IMU(Device):
         acc = self.acc_noize.step(self._base.state.local.acc + local_g)
         ang_vel = self.gyro_noize.step(self._base.state.local.ang_vel)
         
-        return np.concatenate(acc, ang_vel)
+        return np.concatenate((acc, ang_vel))
     
 
 # https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model

@@ -25,12 +25,13 @@ def run():
 
     state = State()
     state.world.pos[2] += 0.1
+    # state.world.rpy[1] = 1.57
 
     drone = QuadCopter(
         client=client,
-        filename= 'custom.urdf',#'cf2x_cam.urdf',
-        # sensors = [],
-        sensors = sensors,
+        filename= 'cf2x_cam.urdf',#'custom.urdf',#'cf2x_cam.urdf',
+        sensors = [],
+        # sensors = sensors,
         state=state
     )
 
@@ -49,6 +50,24 @@ def run():
     print(env.timestep)
     while True:
         _ = env.step(np.array([0,0,0,0]))
-        # env.render()
-        # time.sleep(env.timestep)
+
+        # for i in range(4):
+        pb.applyExternalForce(
+            env.drone.ID,
+            0,
+            forceObj=[0, 0, 0.1],
+            posObj=[0, 0, 0],
+            flags=pb.LINK_FRAME,
+            physicsClientId=client
+        )
+        pb.applyExternalForce(
+            env.drone.ID,
+            1,
+            forceObj=[0, 0, 0.1],
+            posObj=[0, 0, 0],
+            flags=pb.LINK_FRAME,
+            physicsClientId=client
+        )
+        env.render()
+        time.sleep(env.timestep)
 run()
