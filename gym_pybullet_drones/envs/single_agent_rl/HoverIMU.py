@@ -63,7 +63,7 @@ class HoverIMU(BaseRL):
 
     
     def preprocess_action(self, action):
-        return (action+1)*self.drone.max_rps/2
+        return (action/2+1)*self.drone.max_rpm
         
 
     def preprocess_observation(self, observation):

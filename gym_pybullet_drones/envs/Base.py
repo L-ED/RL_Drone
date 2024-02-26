@@ -164,7 +164,7 @@ class Base(gym.Env):
             The ordinal number/position of the desired drone in list self.DRONE_IDS.
 
         """
-        AXIS_LENGTH = 2*self.drone.L
+        AXIS_LENGTH = 2*self.drone.lx
         print("AXS", AXIS_LENGTH)
         self.X_AX = pb.addUserDebugLine(
             lineFromXYZ=[0, 0, 0],
