@@ -6,7 +6,8 @@ import pybullet as pb
 from gym_pybullet_drones.vehicles import QuadCopter
 from gym_pybullet_drones.devices import Camera, mpu6000
 from gym_pybullet_drones.utils.state import State
-
+from torch import sigmoid
+from copy import deepcopy
 
 class HoverIMU(BaseRL):
 
@@ -17,14 +18,21 @@ class HoverIMU(BaseRL):
             control_system=None, 
             logger=None, 
             scene_objects=[], 
-            visualize=True, 
+            visualize=False, 
             record=False, 
             realtime=False
         ):
 
+        self.max_g = 5*9.8
+        self.max_ang_vel = 10 #10 
+
+
         if client is None:
-            client = pb.connect(pb.DIRECT)
-        
+            if visualize:
+                client = pb.connect(pb.GUI)
+            else:
+                client = pb.connect(pb.DIRECT)
+
         if drone is None:
 
             sensors= [
@@ -63,17 +71,17 @@ class HoverIMU(BaseRL):
 
     
     def preprocess_action(self, action):
-        return (action/2+1)*self.drone.max_rpm
+        return self.drone.max_rpm/(1+np.exp(-action))
         
 
     def preprocess_observation(self, observation):
-        max_g = 5*self.G
         obs = None
-        for sens_name, sens_obs_space in observation:
+        for sens_name, sens_obs_space in observation.items():
             if "IMU" in sens_name:
-                sens_obs_space = np.clip(sens_obs_space, -max_g, max_g)/max_g        
+                sens_obs_space = np.clip(sens_obs_space, -self.max_g, self.max_g)/self.max_g        
                 obs = sens_obs_space
         return obs
+    
 
     def check_termination(self):
         
@@ -88,7 +96,8 @@ class HoverIMU(BaseRL):
 
     def create_initial_state(self):
         state = super().create_initial_state()
-        new_pos = np.random.rand(3)*4 - 2
+        # new_pos = np.random.rand(3)*2 - 2
+        new_pos = np.zeros(3)*2
         new_pos[2] = max(new_pos[2], 0.2)
         state.world.pos = new_pos
         return state
@@ -100,7 +109,7 @@ class HoverIMU(BaseRL):
 
     def reward(self):
 
-        state = np.copy(self.drone.state)
+        state = deepcopy(self.drone.state)
 
         disp = np.array([0, 0, 1]) - state.world.pos
         displ_dir = disp/np.linalg.norm(disp)

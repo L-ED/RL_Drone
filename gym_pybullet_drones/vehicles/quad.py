@@ -179,7 +179,7 @@ class QuadCopter:
         # Set initial velocity https://pybullet.org/Bullet/phpBB3/viewtopic.php?t=11793
         pb.resetBaseVelocity(
             self.ID, # model
-            state.lin_vel, # linear velocity
+            state.vel, # linear velocity
             state.ang_vel  # angular velocity
         )
 

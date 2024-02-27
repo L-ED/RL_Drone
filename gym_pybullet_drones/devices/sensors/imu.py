@@ -6,7 +6,7 @@ from gymnasium import spaces
 class IMU(Device):
     name_base = 'IMU'
 
-    def __init__(self, frequency, accel_params, gyro_params, base=None, verbose=True) -> None:
+    def __init__(self, frequency, accel_params, gyro_params, base=None, verbose=False) -> None:
         super().__init__(frequency, base)
 
         self.G=9.8

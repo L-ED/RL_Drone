@@ -70,5 +70,5 @@ def run():
             physicsClientId=client
         )
         env.render()
-        time.sleep(env.timestep)
+        # time.sleep(env.timestep)
 run()

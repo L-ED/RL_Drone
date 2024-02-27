@@ -4,3 +4,4 @@ from gym_pybullet_drones.envs.single_agent_rl.FlyThruGateAviary import FlyThruGa
 from gym_pybullet_drones.envs.single_agent_rl.AimAviary import AimAviary
 
 from gym_pybullet_drones.envs.single_agent_rl.BaseRL import BaseRL
+from gym_pybullet_drones.envs.single_agent_rl.HoverIMU import HoverIMU
