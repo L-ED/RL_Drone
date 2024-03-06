@@ -2,7 +2,7 @@
 
 <robot name="cf2">
 
-  <properties kf="1.9571e-08" km="2.415297e-10" thrust2weight="2.25" prop_radius="15.24e-2" battery_v="11.1" kv="2450"/>
+  <properties kf="1.9571e-08" km="2.415297e-10" thrust2weight="2.25" prop_radius="15.24e-2" battery_v="11.1" kv="2450" pitch="0.1143"/>
 
   <link name="base_link"> 
 

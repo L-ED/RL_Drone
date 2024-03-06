@@ -121,6 +121,7 @@ class QuadCopter:
         # self.COLLISION_Z_OFFSET = COLLISION_SHAPE_OFFSETS[2]
 
         self.prop_diam = float(urdf_tree[0].attrib['prop_radius'])*2
+        self.prop_pitch = float(urdf_tree[0].attrib['pitch'])
         # self.GND_EFF_COEFF = float(urdf_tree[0].attrib['gnd_eff_coeff'])
         # DRAG_COEFF_XY = float(urdf_tree[0].attrib['drag_coeff_xy'])
         # DRAG_COEFF_Z = float(urdf_tree[0].attrib['drag_coeff_z'])
@@ -136,6 +137,7 @@ class QuadCopter:
         vbat = float(urdf_tree[0].attrib['battery_v'])
         kv = float(urdf_tree[0].attrib['kv'])
         self.max_rpm = vbat*kv
+        self.max_speed = self.max_rpm*self.prop_pitch/60 # meters per second
 
     def load_model(self):
 
@@ -337,10 +339,10 @@ class QuadCopter:
         lin_vel, ang_vel = pb.getBaseVelocity(self.ID, self.client)
         pos, qtr = pb.getBasePositionAndOrientation(self.ID, self.client)
 
-        self.state.world.vel = lin_vel
-        self.state.world.ang_vel = ang_vel
-        self.state.world.pos = pos
-        self.state.world.qtr = qtr
+        self.state.world.vel = np.array(lin_vel)
+        self.state.world.ang_vel = np.array(ang_vel)
+        self.state.world.pos = np.array(pos)
+        self.state.world.qtr = np.array(qtr)
 
         # local_lin_vel = np.dot(
         #     self.state.R.T,

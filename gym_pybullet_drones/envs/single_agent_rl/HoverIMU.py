@@ -25,6 +25,7 @@ class HoverIMU(BaseRL):
 
         self.max_g = 5*9.8
         self.max_ang_vel = 10 #10 
+        self.max_radius = 2
 
 
         if client is None:
@@ -88,7 +89,7 @@ class HoverIMU(BaseRL):
         term = False
         pos = np.copy(self.drone.state.world.pos)
         pos[2] -= 1
-        is_out = sum(pos**2) > 4
+        is_out = sum(pos**2) > self.max_radius**2
         if is_out:
             term = True
         return term
@@ -113,32 +114,25 @@ class HoverIMU(BaseRL):
 
         disp = np.array([0, 0, 1]) - state.world.pos
         displ_dir = disp/np.linalg.norm(disp)
-        
+
+        displ_normalized = np.sum(disp**2)/self.max_radius**2
+
         vel = state.world.vel
         flight_dir = vel/np.linalg.norm(vel)
+
+        vel_normalized = np.sum(vel**2)/self.drone.max_speed**2
+
+        closenes_reward = (1-displ_normalized)*(1-vel_normalized)
 
         # print('Position: ', pos, " Velocity: ", vel)
         # print('Displacement ', disp, "Disp_dir ", displ_dir)
         # print("Velocity dir ", flight_dir)
 
-        # p.addUserDebugLine(
-        #     pos, pos+pos*2000000000
-        # )
-
-        # p.addUserDebugLine(
-        #     np.array([0, 0, 1]), np.array([0, 0, 1])+np.array([0, 0, 2]), [0, 1, 0]
-        # )
-
-
         # print(flight_dir, displ_dir)
 
-        ang_cos = np.dot(flight_dir, displ_dir)
-        # print("Cos between dirs", ang_cos)
-        # print(ang_cos)
+        dir_reward = np.dot(flight_dir, displ_dir)
+        angles_reward = -np.linalg.norm(state.world.ang_vel) 
 
-        reward = 100*ang_cos - np.linalg.norm(np.abs(vel)) - \
-                10*np.sum(disp**2)- \
-                10*np.linalg.norm(np.abs(state.world.rpy)) - \
-                100*np.linalg.norm(np.abs(state.world.ang_vel))
+        reward = closenes_reward + dir_reward + angles_reward
         
         return reward

@@ -8,9 +8,10 @@ def main(test=True):
     agent = PPO(
         'MlpPolicy', 
         env=env,
-        verbose=1
+        verbose=1,
+        n_steps=8000
     )
-    # agent.learn(30000)
+    agent.learn(1000000)
     env = HoverIMU(visualize=True)
 
     state, _=env.reset()
@@ -20,7 +21,7 @@ def main(test=True):
             deterministic=True
         )
         state, reward, terminated, truncated, info = env.step(action)
-        print(info['timestemp'])
+        print(info['timestemp'], reward)
 
         time.sleep(env.timestep)
         if terminated or truncated:

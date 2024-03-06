@@ -92,7 +92,7 @@ def mpu6000(base=None): #spi(low) - 100kHZ, spi(high) - 1MHZ, SPI(readonly) - 20
     }
 
     return IMU(
-        frequency= int(1e4),
+        frequency= int(1e3),
         accel_params=accel,
         gyro_params=gyro,
         base=base
