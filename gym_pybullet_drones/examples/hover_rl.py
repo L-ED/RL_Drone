@@ -9,9 +9,9 @@ def main(test=True):
         'MlpPolicy', 
         env=env,
         verbose=1,
-        n_steps=8000
+        # n_steps=8000
     )
-    agent.learn(1000000)
+    agent.learn(500000)
     env = HoverIMU(visualize=True)
 
     state, _=env.reset()

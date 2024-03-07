@@ -4,7 +4,7 @@ import numpy as np
 import pybullet as pb
 
 from gym_pybullet_drones.vehicles import QuadCopter
-from gym_pybullet_drones.devices import Camera, mpu6000
+from gym_pybullet_drones.devices import Camera, mpu6000, Barometer
 from gym_pybullet_drones.utils.state import State
 from torch import sigmoid
 from copy import deepcopy
@@ -37,7 +37,8 @@ class HoverIMU(BaseRL):
         if drone is None:
 
             sensors= [
-                mpu6000()
+                mpu6000(), 
+                Barometer(1e3)
             ]
 
             state = State()
@@ -56,19 +57,26 @@ class HoverIMU(BaseRL):
 
     def normalize_observation_space(self):
 
-        sens_names = [
-            name for name in self.observation_space.keys() 
-            if "IMU" in name]
+        # sens_names = [
+        #     name for name in self.observation_space.keys() 
+        #     if "IMU" in name]
 
-        assert len(sens_names) == 1
+        # assert len(sens_names) == 1
 
-        self.imu_name = sens_names[0]
-        imu_obs_space = self.observation_space[self.imu_name]
+        # self.imu_name = sens_names[0]
+        # imu_obs_space = self.observation_space[self.imu_name]
+        # self.observation_space = spaces.Box(
+        #     low=-1*np.ones(imu_obs_space.shape),
+        #     high=np.ones(imu_obs_space.shape),
+        #     dtype=np.float32
+        # )
+
         self.observation_space = spaces.Box(
-            low=-1*np.ones(imu_obs_space.shape),
-            high=np.ones(imu_obs_space.shape),
+            low=-1*np.ones((1, 7)),
+            high=np.ones((1, 7)),
             dtype=np.float32
         )
+
 
     
     def preprocess_action(self, action):
@@ -76,12 +84,20 @@ class HoverIMU(BaseRL):
         
 
     def preprocess_observation(self, observation):
-        obs = None
-        for sens_name, sens_obs_space in observation.items():
-            if "IMU" in sens_name:
-                sens_obs_space = np.clip(sens_obs_space, -self.max_g, self.max_g)/self.max_g        
-                obs = sens_obs_space
-        return obs
+        # obs = None
+        # for sens_name, sens_obs_space in observation.items():
+        #     if "IMU" in sens_name:
+        #         sens_obs_space = np.clip(sens_obs_space, -self.max_g, self.max_g)/self.max_g        
+        #         obs = sens_obs_space
+        # return obs
+        imu = observation["IMU_0"]
+        imu[:3] = np.clip(imu[:3], -self.max_g, self.max_g)/self.max_g
+        imu[3:] = np.clip(imu[3:], -self.max_ang_vel, self.max_ang_vel)/self.max_ang_vel
+
+        return np.concatenate((
+            imu, 
+            np.array([observation["Bar_0"]/(2*self.max_radius)])
+        )).reshape((1, 7))
     
 
     def check_termination(self):
@@ -133,6 +149,6 @@ class HoverIMU(BaseRL):
         dir_reward = np.dot(flight_dir, displ_dir)
         angles_reward = -np.linalg.norm(state.world.ang_vel) 
 
-        reward = closenes_reward + dir_reward + angles_reward
+        reward = dir_reward + angles_reward #+ closenes_reward 
         
         return reward

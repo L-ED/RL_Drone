@@ -273,7 +273,7 @@ class QuadCopter:
         torque = self.Cq*(RPM**2) 
         # CW rotation produces CCW torque
         # motors orientation means rotation direction CW = 1, CCW = -1
-        future_state.local.force = np.array([0, 0, sum(thrust)])
+        future_state.local.force = np.array([0, 0, np.sum(thrust)])
 
         moment_z = np.dot(self.motor_orientation, torque)      
         moment_x = self.ly*np.dot([-1, -1, 1, 1], thrust)

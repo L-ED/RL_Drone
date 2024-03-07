@@ -13,7 +13,8 @@ class IMU(Device):
         self.verbose = verbose
 
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(1, 6)
+            # low=-np.inf, high=np.inf, shape=(1, 6)
+            low=-np.inf, high=np.inf, shape=(6,)
         )
 
         accel_params['sample_time'] = 1/self.freq
