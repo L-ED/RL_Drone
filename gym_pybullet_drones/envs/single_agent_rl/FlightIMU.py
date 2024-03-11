@@ -126,15 +126,12 @@ class HoverIMU(BaseRL):
 
     def reward(self):
 
-        # safe_radius= 0.3
-        safe_radius= self.max_radius
-
         state = deepcopy(self.drone.state)
 
         disp = np.array([0, 0, 1]) - state.world.pos
         displ_dir = disp/np.linalg.norm(disp)
 
-        displ_normalized = np.sum(disp**2)/(safe_radius)**2
+        displ_normalized = np.sum(disp**2)/(self.max_radius)**2
 
         vel = state.world.vel
         flight_dir = vel/np.linalg.norm(vel)
