@@ -1,37 +1,45 @@
-from stable_baselines3 import PPO, SAC
-from gym_pybullet_drones.envs.single_agent_rl import HoverIMU, HoverGPS
+from stable_baselines3 import PPO, SAC, TD3
+from gym_pybullet_drones.envs.single_agent_rl import HoverIMU, HoverGPS, HoverFullState
 import time
 import torch
 import os
+from stable_baselines3.common.callbacks import EvalCallback
+
 
 def main(test=True):
 
+    savedir = '/home/led/Simulators/Bullet/gym-pybullet-drones/gym_pybullet_drones/results' 
     savepath= os.path.join(
-        '/home/led/Simulators/Bullet/gym-pybullet-drones/gym_pybullet_drones/results',
-        'best'
+        savedir,
+        'best_model'
     )
 
+    trainer = PPO
+    # trainer = SAC
+
     # env_class = HoverIMU
-    env_class = HoverGPS
+    # env_class = HoverGPS
+    env_class = HoverFullState
 
     env = env_class()
-    agent = PPO(
+    agent = trainer(
         'MlpPolicy', 
         env=env,
         verbose=1,
+        tensorboard_log=savedir,
         # n_steps=2000
     )
-    # agent = SAC(
-    #     'MlpPolicy', 
-    #     env=env,
-    #     verbose=1,
-    #     # n_steps=8000
-    # )
 
-    agent.learn(500000)
-    agent.save(savepath)
+    eval_callback = EvalCallback(env, best_model_save_path=savedir,
+                             log_path=savedir, eval_freq=10000,
+                             deterministic=False, render=False)
+
+    test_only=False#True
+    if not test_only:
+        agent.learn(1000000, callback=eval_callback)
+        agent.save(savepath)
     env = env_class(visualize=True)
-    agent = PPO.load(savepath, env=env)
+    agent = trainer.load(savepath, env=env)
 
     state, _=env.reset()
     rew = 0

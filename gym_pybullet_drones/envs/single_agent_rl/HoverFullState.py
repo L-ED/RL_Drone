@@ -4,12 +4,12 @@ import numpy as np
 import pybullet as pb
 
 from gym_pybullet_drones.vehicles import QuadCopter
-from gym_pybullet_drones.devices import Camera, mpu6000, Barometer, GPS
+from gym_pybullet_drones.devices import Camera, mpu6000, Barometer, FullState
 from gym_pybullet_drones.utils.state import State
 from torch import sigmoid
 from copy import deepcopy
 
-class HoverGPS(BaseRL):
+class HoverFullState(BaseRL):
 
     def __init__(
             self, 
@@ -39,9 +39,8 @@ class HoverGPS(BaseRL):
         if drone is None:
 
             sensors= [
-                GPS(1e3),
-                mpu6000(), 
-                # Barometer(1e3)
+                FullState(1e3),
+                mpu6000()
             ]
 
             state = State()
@@ -61,36 +60,45 @@ class HoverGPS(BaseRL):
     def normalize_observation_space(self):
 
         self.observation_space = spaces.Box(
-            low=-1*np.ones((1, 9)),
-            high=np.ones((1, 9)),
+            low=-1*np.ones((1, 18)),
+            high=np.ones((1, 18)),
             dtype=np.float32
         )
 
 
     
     def preprocess_action(self, action):
-        return self.drone.max_rpm/(1+np.exp(-action*4))
+        return self.drone.max_rpm/(1+np.exp(-action*3))
         
 
     def preprocess_observation(self, observation):
 
-        imu = observation["IMU_0"]
-        # imu[:3] = np.clip(imu[:3], -self.max_g, self.max_g)/self.max_g
-        # imu[3:] = np.clip(imu[3:], -self.max_ang_vel, self.max_ang_vel)/self.max_ang_vel
+        max_disp = self.max_radius
+        # max_vel = self.
 
-        pos = observation["GPS_0"]
+        pos, ang, vel, a_vel, acc, a_acc = observation['FS_0'] 
+        imu = observation['IMU_0'] 
         targ_disp = self.target_pos - pos
-        # targ_disp = targ_disp/np.linalg.norm(targ_disp)
-        # pos = pos/self.max_radius 
-        # pos[2] = pos[2]/2
 
+        stats = [
+            pos, 
+            a_vel,
+            vel, 
+            imu[:3],
+            imu[3:],
+            # a_acc, 
+            # acc,
+            targ_disp
+        ]
 
-        return np.concatenate((
-            imu, 
-            # np.array([observation["Bar_0"]/(2*self.max_radius)]),
-            # pos
-            targ_disp#/np.linalg.norm(targ_disp)
-        )).reshape((1, 9))
+        # for i in range(len(stats)):
+        #     value = stats[i]
+        #     value_norm = np.linalg.norm(value)
+        #     if value_norm != 0:
+        #         value = value/value_norm 
+        #     stats[i] = value
+
+        return np.concatenate(stats).reshape((1, 18))
     
 
     def check_termination(self):
@@ -106,8 +114,8 @@ class HoverGPS(BaseRL):
 
     def create_initial_state(self):
         state = super().create_initial_state()
-        # new_pos = np.random.rand(3)*2 - 2
-        new_pos = np.zeros(3)*2
+        new_pos = np.random.rand(3)/2
+        # new_pos = np.zeros(3)*2
         new_pos[2] = max(new_pos[2], 0.2)
         state.world.pos = new_pos
         return state
@@ -135,7 +143,7 @@ class HoverGPS(BaseRL):
         vel_normalized = np.sum(vel**2)/(self.drone.max_speed/2)**2
 
         closenes_reward = (1-displ_normalized)#*(1-vel_normalized)
-        if np.sum(disp**2)<0.3:
+        if np.sum(disp**2)<0.1:
             closenes_reward +=1
 
         # print('Position: ', pos, " Velocity: ", vel)
