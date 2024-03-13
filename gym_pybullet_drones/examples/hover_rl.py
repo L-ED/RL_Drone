@@ -27,16 +27,17 @@ def main(test=True):
         env=env,
         verbose=1,
         tensorboard_log=savedir,
-        # n_steps=2000
+        n_steps=6000
     )
 
     eval_callback = EvalCallback(env, best_model_save_path=savedir,
                              log_path=savedir, eval_freq=10000,
                              deterministic=False, render=False)
 
-    test_only=False#True
+    test_only=False
+    # test_only=True
     if not test_only:
-        agent.learn(1000000, callback=eval_callback)
+        agent.learn(5000000, callback=eval_callback)
         agent.save(savepath)
     env = env_class(visualize=True)
     agent = trainer.load(savepath, env=env)

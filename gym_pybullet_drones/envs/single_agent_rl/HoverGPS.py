@@ -106,8 +106,8 @@ class HoverGPS(BaseRL):
 
     def create_initial_state(self):
         state = super().create_initial_state()
-        # new_pos = np.random.rand(3)*2 - 2
-        new_pos = np.zeros(3)*2
+        new_pos = np.random.rand(3)*2 - 1
+        # new_pos = np.zeros(3)
         new_pos[2] = max(new_pos[2], 0.2)
         state.world.pos = new_pos
         return state

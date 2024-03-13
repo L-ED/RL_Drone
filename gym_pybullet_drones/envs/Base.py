@@ -70,6 +70,9 @@ class Base(gym.Env):
         self.step_idx=0
         self.timestemp=0
 
+        for sensor in self.drone.sensors:
+            sensor.counter = 0
+
         pb.resetSimulation(physicsClientId=self.client)
         self.init_sim()
         state = self.create_initial_state()
