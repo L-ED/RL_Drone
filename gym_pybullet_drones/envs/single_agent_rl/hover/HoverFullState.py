@@ -4,12 +4,12 @@ import numpy as np
 import pybullet as pb
 
 from gym_pybullet_drones.vehicles import QuadCopter
-from gym_pybullet_drones.devices import Camera, mpu6000, Barometer
+from gym_pybullet_drones.devices import Camera, mpu6000, Barometer, FullState
 from gym_pybullet_drones.utils.state import State
 from torch import sigmoid
 from copy import deepcopy
 
-class HoverIMU(BaseRL):
+class HoverFullState(BaseRL):
 
     def __init__(
             self, 
@@ -23,10 +23,12 @@ class HoverIMU(BaseRL):
             realtime=False
         ):
 
-        self.max_g = 5*9.8
-        self.max_ang_vel = 10 #10 
+        self.max_g = 2*9.8
+        self.max_ang_vel = 2 #10 
         self.max_radius = 1
 
+        self.target_pos = np.array([0, 0, 1])
+        self.randomize = True
 
         if client is None:
             if visualize:
@@ -37,8 +39,8 @@ class HoverIMU(BaseRL):
         if drone is None:
 
             sensors= [
-                mpu6000(), 
-                Barometer(1e3)
+                FullState(1e3),
+                mpu6000()
             ]
 
             state = State()
@@ -57,47 +59,46 @@ class HoverIMU(BaseRL):
 
     def normalize_observation_space(self):
 
-        # sens_names = [
-        #     name for name in self.observation_space.keys() 
-        #     if "IMU" in name]
-
-        # assert len(sens_names) == 1
-
-        # self.imu_name = sens_names[0]
-        # imu_obs_space = self.observation_space[self.imu_name]
-        # self.observation_space = spaces.Box(
-        #     low=-1*np.ones(imu_obs_space.shape),
-        #     high=np.ones(imu_obs_space.shape),
-        #     dtype=np.float32
-        # )
-
         self.observation_space = spaces.Box(
-            low=-1*np.ones((1, 7)),
-            high=np.ones((1, 7)),
+            low=-1*np.ones((1, 12)),
+            high=np.ones((1, 12)),
             dtype=np.float32
         )
 
 
     
     def preprocess_action(self, action):
-        return self.drone.max_rpm/(1+np.exp(-action*2))
+        return self.drone.max_rpm/(1+np.exp(-action*3))
         
 
     def preprocess_observation(self, observation):
-        # obs = None
-        # for sens_name, sens_obs_space in observation.items():
-        #     if "IMU" in sens_name:
-        #         sens_obs_space = np.clip(sens_obs_space, -self.max_g, self.max_g)/self.max_g        
-        #         obs = sens_obs_space
-        # return obs
-        imu = observation["IMU_0"]
-        imu[:3] = np.clip(imu[:3], -self.max_g, self.max_g)/self.max_g
-        imu[3:] = np.clip(imu[3:], -self.max_ang_vel, self.max_ang_vel)/self.max_ang_vel
 
-        return np.concatenate((
-            imu, 
-            np.array([observation["Bar_0"]/(2*self.max_radius)])
-        )).reshape((1, 7))
+        max_disp = self.max_radius
+        # max_vel = self.
+
+        pos, ang, vel, a_vel, acc, a_acc = observation['FS_0'] 
+        imu = observation['IMU_0'] 
+        targ_disp = self.target_pos - pos
+
+        stats = [
+            pos, 
+            a_vel,
+            vel, 
+            # imu[:3],
+            # imu[3:],
+            # a_acc, 
+            # acc,
+            targ_disp
+        ]
+
+        # for i in range(len(stats)):
+        #     value = stats[i]
+        #     value_norm = np.linalg.norm(value)
+        #     if value_norm != 0:
+        #         value = value/value_norm 
+        #     stats[i] = value
+
+        return np.concatenate(stats).reshape((1, 12))
     
 
     def check_termination(self):
@@ -113,9 +114,15 @@ class HoverIMU(BaseRL):
 
     def create_initial_state(self):
         state = super().create_initial_state()
-        # new_pos = np.random.rand(3)*2 - 2
-        new_pos = np.zeros(3)*2
-        new_pos[2] = max(new_pos[2], 0.2)
+        if self.randomize:
+            new_pos = np.random.rand(3)
+            # new_pos = np.zeros(3)*2
+            new_pos[:2] -= 0.5
+            new_pos[2] = max(new_pos[2]*2, 0.2)
+        else:
+            new_pos = np.zeros(3)
+            new_pos[2] = 0.2
+
         state.world.pos = new_pos
         return state
     
@@ -126,12 +133,15 @@ class HoverIMU(BaseRL):
 
     def reward(self):
 
+        # safe_radius= 0.3
+        safe_radius= self.max_radius
+
         state = deepcopy(self.drone.state)
 
         disp = np.array([0, 0, 1]) - state.world.pos
         displ_dir = disp/np.linalg.norm(disp)
 
-        displ_normalized = np.sum(disp**2)/(self.max_radius)**2
+        displ_normalized = np.sum(disp**2)/(safe_radius)**2
 
         vel = state.world.vel
         flight_dir = vel/np.linalg.norm(vel)
@@ -139,17 +149,18 @@ class HoverIMU(BaseRL):
         vel_normalized = np.sum(vel**2)/(self.drone.max_speed/2)**2
 
         closenes_reward = (1-displ_normalized)#*(1-vel_normalized)
-        if np.sum(disp**2)<0.1:
-            closenes_reward +=1
-
-        # print('Position: ', pos, " Velocity: ", vel)
-        # print('Displacement ', disp, "Disp_dir ", displ_dir)
-        # print("Velocity dir ", flight_dir)
-
-        # print(flight_dir, displ_dir)
 
         dir_reward = np.dot(flight_dir, displ_dir)
-        angles_reward = -np.linalg.norm(state.world.ang_vel) 
+
+        if np.sum(disp**2)<0.2:
+            closenes_reward +=1
+            dir_reward=1
+
+        # dir_reward = np.log10(0.1+np.abs(dir_reward-1))
+        # if dir_reward < 0:
+        #     dir_reward *= np.linalg.norm(vel)
+
+        angles_reward = 0#-np.linalg.norm(state.world.ang_vel) 
 
         reward = dir_reward + angles_reward + closenes_reward 
         # reward = (1-displ_normalized)#dir_reward + angles_reward + closenes_reward 

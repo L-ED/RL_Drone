@@ -12,6 +12,10 @@ def main(test=True):
     savepath= os.path.join(
         savedir,
         'best_model'
+        # "best_model_ppo_longlearn"
+        # 'best_model_ppo_nonorm_imu_BEST'
+        # 'best_model_ppo_nonorm'
+        # 'best_model_random_noize'
     )
 
     trainer = PPO
@@ -20,26 +24,30 @@ def main(test=True):
     # env_class = HoverIMU
     # env_class = HoverGPS
     env_class = HoverFullState
+    policy_kwargs = dict(net_arch=dict(pi=[64, 64], qf=[64, 64]))
 
     env = env_class()
+    # env.randomize = False
     agent = trainer(
         'MlpPolicy', 
         env=env,
         verbose=1,
         tensorboard_log=savedir,
-        n_steps=6000
+        # policy_kwargs=policy_kwargs
+        # n_steps=6000
     )
 
     eval_callback = EvalCallback(env, best_model_save_path=savedir,
                              log_path=savedir, eval_freq=10000,
-                             deterministic=False, render=False)
+                             deterministic=True, render=False)
 
     test_only=False
     # test_only=True
     if not test_only:
-        agent.learn(5000000, callback=eval_callback)
+        agent.learn(1000000, callback=eval_callback)
         agent.save(savepath)
     env = env_class(visualize=True)
+    # env.randomize = False
     agent = trainer.load(savepath, env=env)
 
     state, _=env.reset()
@@ -50,7 +58,9 @@ def main(test=True):
             deterministic=True
         )
         state, reward, terminated, truncated, info = env.step(action)
-        # print(info['timestemp'], reward)
+        # print(state, reward)
+        msg = f"POS {state[0, :3]}  VEL{state[0, 6:9]}, ACC {state[0, 12:15]}"
+        print(msg)
         rew+=reward
 
         time.sleep(env.timestep)

@@ -69,7 +69,8 @@ class Base(gym.Env):
     def reset(self):
         self.step_idx=0
         self.timestemp=0
-
+        np.random.seed()
+        
         for sensor in self.drone.sensors:
             sensor.counter = 0
 

@@ -33,7 +33,9 @@ class IMU(Device):
             self._base.state.R.T,
             np.array([0, 0, -self.G]))
         
-        acc = self.acc_noize.step(self._base.state.local.acc + local_g)
+        acc = self.acc_noize.step(
+            self._base.state.local.acc #+ local_g
+        )
         ang_vel = self.gyro_noize.step(self._base.state.local.ang_vel)
         
         if self.verbose:

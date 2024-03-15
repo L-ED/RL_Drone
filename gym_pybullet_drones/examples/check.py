@@ -14,18 +14,18 @@ def run():
     client = pb.connect(pb.GUI)
 
     sensors= [
-        # Camera(
-        #     image_size = [640, 480],
-        #     fov= 60,
-        #     displ = np.array([0, 0, 0.1]),
-        #     frequency = 60
-        # ),
+        Camera(
+            image_size = [640, 480],
+            fov= 60,
+            displ = np.array([0, 0, 0.1]),
+            frequency = 60
+        ),
         mpu6000()
         ]
 
     state = State()
     state.world.pos[2] += 1.0
-    # state.world.rpy[1] = 1.57
+    state.world.rpy[1] = 1.57
 
     drone = QuadCopter(
         client=client,

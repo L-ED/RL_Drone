@@ -344,10 +344,16 @@ class QuadCopter:
         self.state.world.pos = np.array(pos)
         self.state.world.qtr = np.array(qtr)
 
-        # local_lin_vel = np.dot(
-        #     self.state.R.T,
-        #     lin_vel
-        # )
+        local_g = np.dot(
+            self.state.R.T,
+            np.array([0, 0, -9.8]))
+
+        self.state.local.acc += local_g
+
+        self.state.world.acc = np.dot(
+            self.state.R, new_state.local.acc)
+        self.state.world.ang_acc = np.dot(
+            self.state.R, new_state.local.ang_acc)
 
         self.state.local.vel = np.dot(self.state.R.T, lin_vel)#new_state.local.vel
         self.state.local.ang_vel = np.dot(self.state.R.T, ang_vel)#new_state.local.ang_vel
