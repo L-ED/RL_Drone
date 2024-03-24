@@ -27,7 +27,7 @@ class FlightFullState(BaseRL):
         self.max_ang_vel = 2 #10 
         self.max_radius = 1
 
-        self.target_pos = np.array([0, 0, 1])
+        self.target_pos = np.array([10, 0, 1])
         self.randomize = True
 
         if client is None:
@@ -39,8 +39,7 @@ class FlightFullState(BaseRL):
         if drone is None:
 
             sensors= [
-                FullState(1e3),
-                mpu6000()
+                FullState(500)
             ]
 
             state = State()
@@ -60,8 +59,8 @@ class FlightFullState(BaseRL):
     def normalize_observation_space(self):
 
         self.observation_space = spaces.Box(
-            low=-1*np.ones((1, 18)),
-            high=np.ones((1, 18)),
+            low=-1*np.ones((1, 15)),
+            high=np.ones((1, 15)),
             dtype=np.float32
         )
 
@@ -73,17 +72,13 @@ class FlightFullState(BaseRL):
     def preprocess_observation(self, observation):
 
         pos, ang, vel, a_vel, acc, a_acc = observation['FS_0'] 
-        imu = observation['IMU_0'] 
         targ_disp = self.target_pos - pos
 
         stats = [
-            pos, 
-            a_vel,
+            pos,
+            ang, 
             vel, 
-            imu[:3],
-            imu[3:],
-            # a_acc, 
-            # acc,
+            a_vel,
             targ_disp
         ]
 
@@ -94,7 +89,7 @@ class FlightFullState(BaseRL):
         #         value = value/value_norm 
         #     stats[i] = value
 
-        return np.concatenate(stats).reshape((1, 18))
+        return np.concatenate(stats).reshape((1, 15))
     
 
     def check_termination(self):
@@ -102,7 +97,7 @@ class FlightFullState(BaseRL):
         term = False
         pos = np.copy(self.drone.state.world.pos)
         pos[2] -= 1
-        is_out = sum(pos**2) > self.max_radius**2
+        is_out = sum(pos**2) > sum(self.target_pos**2)*1.5
         if is_out:
             term = True
         return term
@@ -132,7 +127,7 @@ class FlightFullState(BaseRL):
 
         state = deepcopy(self.drone.state)
 
-        disp = np.array([0, 0, 1]) - state.world.pos
+        disp = self.target_pos - state.world.pos
         displ_dir = disp/np.linalg.norm(disp)
 
         displ_normalized = np.sum(disp**2)/(safe_radius)**2
@@ -150,9 +145,9 @@ class FlightFullState(BaseRL):
         # if dir_reward < 0:
         #     dir_reward *= np.linalg.norm(vel)
 
-        angles_reward = 0#-np.linalg.norm(state.world.ang_vel) 
+        # angles_reward = -np.linalg.norm(state.world.ang_vel) 
 
-        reward = dir_reward + angles_reward + closenes_reward 
+        reward = dir_reward #+ closenes_reward 
         # reward = (1-displ_normalized)#dir_reward + angles_reward + closenes_reward 
         
         return reward
