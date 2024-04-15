@@ -8,6 +8,7 @@ from gym_pybullet_drones.devices import Camera, mpu6000, Barometer, FullState
 from gym_pybullet_drones.utils.state import State
 from torch import sigmoid
 from copy import deepcopy
+import torch
 
 class HoverFullState(BaseRL):
 
@@ -20,8 +21,17 @@ class HoverFullState(BaseRL):
             scene_objects=[], 
             visualize=False, 
             record=False, 
-            realtime=False
+            realtime=False, 
+            max_step = 2000, 
+            seed = 42, 
+
         ):
+
+        self.set_seed(seed)
+
+        self.elem_num = 15#18
+
+        self.max_step = max_step
 
         self.max_g = 2*9.8
         self.max_ang_vel = 2 #10 
@@ -39,7 +49,7 @@ class HoverFullState(BaseRL):
         if drone is None:
 
             sensors= [
-                FullState(1e3),
+                FullState(500),
                 mpu6000()
             ]
 
@@ -57,18 +67,24 @@ class HoverFullState(BaseRL):
         super().__init__(client, drone, control_system, logger, scene_objects, visualize, record, realtime)
         
 
+    def set_seed(self, seed):
+        np.random.seed(seed)
+        torch.random.seed(seed)
+        
+
     def normalize_observation_space(self):
 
         self.observation_space = spaces.Box(
-            low=-1*np.ones((1, 12)),
-            high=np.ones((1, 12)),
+            low=-1*np.ones((1, self.elem_num)),
+            high=np.ones((1, self.elem_num)),
             dtype=np.float32
         )
 
 
     
     def preprocess_action(self, action):
-        return self.drone.max_rpm/(1+np.exp(-action*3))
+        self.last_action = action.copy()
+        return self.drone.max_rpm/(1+np.exp(-action))
         
 
     def preprocess_observation(self, observation):
@@ -81,7 +97,8 @@ class HoverFullState(BaseRL):
         targ_disp = self.target_pos - pos
 
         stats = [
-            pos, 
+            pos,
+            ang,
             a_vel,
             vel, 
             # imu[:3],
@@ -98,7 +115,8 @@ class HoverFullState(BaseRL):
         #         value = value/value_norm 
         #     stats[i] = value
 
-        return np.concatenate(stats).reshape((1, 12))
+        return np.concatenate(stats).reshape((1, self.elem_num))
+        # return np.concatenate(stats).reshape((1, 12))
     
 
     def check_termination(self):
@@ -110,6 +128,13 @@ class HoverFullState(BaseRL):
         if is_out:
             term = True
         return term
+    
+
+    def check_truncation(self):
+        trunc = False
+        if self.step_idx > self.max_step:
+            trunc = True
+        return trunc
     
 
     def create_initial_state(self):
@@ -156,13 +181,9 @@ class HoverFullState(BaseRL):
             closenes_reward +=1
             dir_reward=1
 
-        # dir_reward = np.log10(0.1+np.abs(dir_reward-1))
-        # if dir_reward < 0:
-        #     dir_reward *= np.linalg.norm(vel)
+        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)) 
 
-        angles_reward = 0#-np.linalg.norm(state.world.ang_vel) 
-
-        reward = dir_reward + angles_reward + closenes_reward 
+        reward = dir_reward*0.1 + angles_reward*0.1 + closenes_reward 
         # reward = (1-displ_normalized)#dir_reward + angles_reward + closenes_reward 
         
         return reward

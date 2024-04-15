@@ -4,11 +4,24 @@ import time
 import torch
 import os
 from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.vec_env import SubprocVecEnv, subproc_vec_env 
+
+def make_env(env_class, rank):
+
+    def init_():
+        env = env_class(seed=rank)
+        env.rank = rank
+        env.id = rank
+        return env
+    
+    return init_
 
 
 def main(test=True):
 
-    savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover' 
+    proc_num = 4
+
+    savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover/multienv' 
     savepath= os.path.join(
         savedir,
         'best_model'
@@ -19,33 +32,29 @@ def main(test=True):
     )
 
     trainer = PPO
-    # trainer = SAC
 
-    # env_class = HoverIMU
-    # env_class = HoverGPS
     env_class = HoverFullState
-    policy_kwargs = dict(net_arch=dict(pi=[64, 64], qf=[64, 64]))
+    vec_env = SubprocVecEnv([make_env(env_class, i) for i in range(proc_num)])
+    eval_env = HoverFullState()
 
-    env = env_class()
     # env.randomize = False
     agent = trainer(
         'MlpPolicy', 
-        env=env,
-        verbose=1,
+        env=vec_env,
+        verbose=0,
         tensorboard_log=savedir,
         # policy_kwargs=policy_kwargs
         # n_steps=10000
     )
 
-    eval_callback = EvalCallback(env, best_model_save_path=savedir,
+    eval_callback = EvalCallback(eval_env, best_model_save_path=savedir,
                              log_path=savedir, eval_freq=10000,
                              deterministic=True, render=False)
 
-    test_only=False
-    # test_only=True
-    if not test_only:
-        agent.learn(2000000, callback=eval_callback)
-        agent.save(savepath)
+
+    agent.learn(2000000, callback=eval_callback)
+    agent.save(savepath)
+
     env = env_class(visualize=True)
     # env.randomize = False
     agent = trainer.load(savepath, env=env)
@@ -70,5 +79,5 @@ def main(test=True):
             state, _=env.reset()
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     main()

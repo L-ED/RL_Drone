@@ -274,6 +274,7 @@ class QuadCopter:
         # CW rotation produces CCW torque
         # motors orientation means rotation direction CW = 1, CCW = -1
         future_state.local.force = np.array([0, 0, np.sum(thrust)])
+        future_state.local.thrust = thrust.copy()
 
         moment_z = np.dot(self.motor_orientation, torque)      
         moment_x = self.ly*np.dot([-1, -1, 1, 1], thrust)
@@ -304,10 +305,12 @@ class QuadCopter:
     def apply_force(self, state):
 
         # pass
+        forces = state.local.thrust.tolist()
         for i in range(4):
             pb.applyExternalForce(self.ID,
                                  i,
-                                 forceObj=state.local.force.tolist(),
+                                #  forceObj=state.local.force.tolist(),
+                                 forceObj=[0, 0, forces[i]],
                                  posObj=[0, 0, 0],
                                  flags=pb.LINK_FRAME,
                                  physicsClientId=self.client

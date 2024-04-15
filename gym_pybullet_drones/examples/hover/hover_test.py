@@ -10,7 +10,9 @@ def main(test=True):
     savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover' 
     savepath= os.path.join(
         savedir,
-        'best_model'
+        '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover/multiple/model_2000_2000.zip'
+        # 'best'
+        # 'best_model'
         # "best_model_ppo_longlearn"
         # 'best_model_ppo_nonorm_imu_BEST'
         # 'best_model_ppo_nonorm'
@@ -27,7 +29,7 @@ def main(test=True):
     policy_kwargs = dict(net_arch=dict(pi=[64, 64], qf=[64, 64]))
 
     env = env_class(visualize=True)
-    env.randomize = False
+    # env.randomize = False
     agent = trainer.load(savepath, env=env)
 
     state, _=env.reset()
@@ -38,10 +40,10 @@ def main(test=True):
             deterministic=True
         )
         state, reward, terminated, truncated, info = env.step(action)
-        # print(state, reward)
+        print(reward, action)
         
-        msg = f"POS {state[0, :3]}  VEL{state[0, 6:9]}, ACC {state[0, 12:15]}"
-        print(msg)
+        # msg = f"POS {state[0, :3]}  VEL{state[0, 6:9]}, ACC {state[0, 12:15]}"
+        # print(msg)
         rew+=reward
 
         time.sleep(env.timestep)
