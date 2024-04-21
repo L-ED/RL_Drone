@@ -11,30 +11,41 @@ class Base(gym.Env):
 
     def __init__(self, client, drone, control_system=None, logger=None, scene_objects=[], visualize=True, record=False, realtime=False):
 
-        G=9.8
+        self.G=9.8
         self.rho = 1.
         self.drone = drone
         self.control_system = control_system
         self.client = client
+        self.scene_objects = scene_objects
+        self.realtime = realtime
+        self.visualize = visualize
+
+        self.action_space = self.drone.actionSpace
+        self.observation_space = self.drone.obsSpace
 
         self.find_env_frequency(realtime)
 
-        self.add_objects(scene_objects, drone)
+        self.init_sim()
 
-        pb.setGravity(0, 0, -G, physicsClientId=self.client)
-        pb.setRealTimeSimulation(realtime, self.client) # diesnt work in DIRECT
+
+    def init_sim(self):
+
+        self.add_objects(self.scene_objects, self.drone)
+
+        pb.setGravity(0, 0, -self.G, physicsClientId=self.client)
+        pb.setRealTimeSimulation(self.realtime, self.client) # diesnt work in DIRECT
 
         self.step_idx=0
         self.timestemp = 0
 
-        self.action_space = self.drone.actionSpace
-        self.observation_space = self.drone.obsSpace
+        # self.action_space = self.drone.actionSpace
+        # self.observation_space = self.drone.obsSpace
 
         self.X_AX = -1
         self.Y_AX = -1
         self.Z_AX = -1
 
-        if visualize:
+        if self.visualize:
             self.showDroneLocalAxes()
             self.drone.visualize_sensors()
 
@@ -49,20 +60,28 @@ class Base(gym.Env):
         truncated = self.check_truncation()
         info = self.compute_info()
         self.step_idx+=1
-        self.timestemp+=self.timestep
+        self.timestemp=self.timestep*self.step_idx
+        info['timestep'] = self.timestep
+        info['timestemp'] = self.timestemp
         return obs, reward, terminated, truncated, info
 
 
     def reset(self):
         self.step_idx=0
         self.timestemp=0
+        # np.random.seed()
+        
+        for sensor in self.drone.sensors:
+            sensor.counter = 0
 
-        pb.resetSimulation(physicsClientId=self.CLIENT)
+        # pb.resetSimulation(physicsClientId=self.client)
+        # self.init_sim()
         state = self.create_initial_state()
         self.drone.reset_state(state)
         action = self.create_initial_action()
-        obs = self.drone.step(action)
-        return obs
+        obs = self.drone.step(action, self)
+        # print("DRONE", obs)
+        return obs, {}
     
 
     def render(self):
@@ -120,7 +139,7 @@ class Base(gym.Env):
             )
 
         vehicle.load_model()
-    
+
 
     def reward(self):
         return 0
@@ -135,7 +154,7 @@ class Base(gym.Env):
     
 
     def compute_info(self):
-        return None
+        return {}
     
 
     def create_initial_state(self):
@@ -164,8 +183,8 @@ class Base(gym.Env):
             The ordinal number/position of the desired drone in list self.DRONE_IDS.
 
         """
-        AXIS_LENGTH = 2*self.drone.L
-        print("AXS", AXIS_LENGTH)
+        AXIS_LENGTH = 2*self.drone.lx
+        # print("AXS", AXIS_LENGTH)
         self.X_AX = pb.addUserDebugLine(
             lineFromXYZ=[0, 0, 0],
             lineToXYZ=[AXIS_LENGTH, 0, 0],
@@ -208,8 +227,10 @@ class Base(gym.Env):
             self.min_frequency = self.find_lcm(devs_freqs)
 
         if not realtime:
-            pb.setTimeStep(1/self.min_frequency)
+            pb.setRealTimeSimulation(0)
+            pb.setTimeStep(1/self.min_frequency, self.client)
             self.timestep = 1/self.min_frequency
 
+        print("Frequency ", self.min_frequency)
         self.drone.set_sensor_ticks(self.min_frequency)
         

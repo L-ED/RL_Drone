@@ -17,6 +17,7 @@ from functools import cache
 @dataclass
 class Inner_state:
     force: np.array = field(default_factory= lambda: np.array([0, 0, 0], dtype=np.float64))
+    thrust: np.array = field(default_factory= lambda: np.array([0, 0, 0, 0], dtype=np.float64))
     torque: np.array = field(default_factory= lambda: np.array([0, 0, 0], dtype=np.float64))
     vel: np.array = field(default_factory= lambda:np.array([0, 0, 0], dtype=np.float64))
     acc: np.array = field(default_factory= lambda:np.array([0, 0, 0], dtype=np.float64))

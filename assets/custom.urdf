@@ -2,14 +2,15 @@
 
 <robot name="cf2">
 
-  <properties arm="0.0397" kf="3.16e-10" km="7.94e-12" thrust2weight="2.25" max_speed_kmh="30" gnd_eff_coeff="11.36859" prop_radius="2.31348e-2" drag_coeff_xy="9.1785e-7" drag_coeff_z="10.311e-7" dw_coeff_1="2267.18" dw_coeff_2=".16" dw_coeff_3="-.11" />
+  <properties kf="1.9571e-08" km="2.415297e-10" thrust2weight="2.25" prop_radius="15.24e-2" battery_v="11.1" kv="2450" pitch="0.1143"/>
 
   <link name="base_link"> 
 
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
-      <mass value="0.027"/>
-      <inertia ixx="2.3951e-5" ixy="0.0" ixz="0.0" iyy="2.3951e-5" iyz="0.0" izz="3.2347e-5"/>
+      <mass value="0.725977"/>
+      <!-- <inertia ixx="2.480604646e-3" ixy="0" ixz="0" iyy="2.507424636e-3" iyz="0" izz="4.232598450e-3"/> -->
+      <inertia ixx="2.480604646e-3" ixy="-2.003701e-6" ixz="0.05951942e-3" iyy="2.507424636e-3" iyz="0.576004e-6" izz="4.232598450e-3"/>
     </inertial>
 
     <!-- links>
@@ -29,9 +30,11 @@
     </visual>
 
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0 0 0.025"/>
       <geometry>
-        <cylinder radius=".06" length=".025"/>
+        <!-- <cylinder radius=".1" length=".25"/> -->
+        <box size=".32 .35 .05"/>
+        <!-- <mesh filename="./drone_normal_zup.obj" scale=" 0.001 0.001 0.001"/> -->
       </geometry>
     </collision>  
 
@@ -39,7 +42,7 @@
 
   <link name="prop0_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="0.0397 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.07998 -0.10144 0"/>
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
@@ -51,7 +54,7 @@
 
   <link name="prop1_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="0 0.0397 0"/>
+      <origin rpy="0 0 0" xyz="0.07998 -0.10144 0"/>
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
@@ -63,7 +66,7 @@
 
   <link name="prop2_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="-0.0397 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.07998 0.10144 0"/>
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
@@ -75,7 +78,7 @@
 
   <link name="prop3_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="0 -0.0397 0"/>
+      <origin rpy="0 0 0" xyz="0.07998 0.10144 0"/>
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>

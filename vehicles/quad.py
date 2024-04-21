@@ -19,6 +19,23 @@ import copy
 
 class QuadCopter:
 
+    '''
+      ____          ____
+     /    \        /    \
+    |  CW  |      | CCW  |
+     \____/ 4      \____/ 2
+
+              /\
+             /  \
+      ____          ____
+     /    \        /    \
+    | CCW  |      |  CW  |
+     \____/ 3      \____/ 1          x
+                                     |
+                                y ___|
+    '''
+
+
     def __init__(
             self, 
             client: int,  
@@ -31,7 +48,8 @@ class QuadCopter:
             'gym_pybullet_drones', 'assets/'+filename
         )
 
-        self.motor_orientation=np.array([-1,1, 1, -1])
+        # ccw is plus, cw minus
+        self.motor_orientation=np.array([1,-1, -1, 1])
         
         self.client = client
         self.state = state
@@ -56,37 +74,70 @@ class QuadCopter:
         urdf_tree = etxml.parse(self.filepath).getroot()
         self.mass = float(urdf_tree[1][0][1].attrib['value'])
 
-        IXX = float(urdf_tree[1][0][2].attrib['ixx'])
-        IYY = float(urdf_tree[1][0][2].attrib['iyy'])
-        IZZ = float(urdf_tree[1][0][2].attrib['izz'])
-        self.J = np.diag([IXX, IYY, IZZ])
+        iner = urdf_tree[1][0][2]
+        val = {
+            x:float(iner.attrib[x]) for x in 
+            ['ixx', 'ixy', 'ixz', 
+             'iyy', 'iyz',
+             'izz'
+            ]
+        }
+        # here are some CAD and CAE applications such as SolidWorks, 
+        # that use an alternate convention for the products of inertia. 
+        # The minus sign is removed from the product of inertia formulas
+        # https://en.wikipedia.org/wiki/Moment_of_inertia
+        self.J = np.array(
+            # [
+            #     [val['ixx'], -val['ixy'], -val['ixz']],
+            #     [-val['ixy'], val['iyy'], -val['iyz']],
+            #     [-val['ixz'], -val['iyz'], val['izz']],
+            # ]
+            [
+                [val['ixx'], val['ixy'], val['ixz']],
+                [val['ixy'], val['iyy'], val['iyz']],
+                [val['ixz'], val['iyz'], val['izz']],
+            ]
+        )
+
+        # IXX = float(urdf_tree[1][0][2].attrib['ixx'])
+        # IYY = float(urdf_tree[1][0][2].attrib['iyy'])
+        # IZZ = float(urdf_tree[1][0][2].attrib['izz'])
+        # self.J = np.diag([IXX, IYY, IZZ])
         self.J_inv = np.linalg.inv(self.J)
 
-        self.L = float(urdf_tree[0].attrib['arm'])
+        # self.L = float(urdf_tree[0].attrib['arm'])
 
         self.lx, self.ly = [
             abs(float(x)) for x in 
             urdf_tree[2][0][0].attrib['xyz'].split()[:2]
         ]
 
+        # Ct and Cq measured as ratio between torque\thrust and rpm**2, no additional coefs required
         self.Ct = float(urdf_tree[0].attrib['kf'])
         self.Cq = float(urdf_tree[0].attrib['km'])
-        self.COLLISION_H = float(urdf_tree[1][2][1][0].attrib['length'])
-        self.COLLISION_R = float(urdf_tree[1][2][1][0].attrib['radius'])
-        COLLISION_SHAPE_OFFSETS = [float(s) for s in urdf_tree[1][2][0].attrib['xyz'].split(' ')]
-        self.COLLISION_Z_OFFSET = COLLISION_SHAPE_OFFSETS[2]
+        # self.COLLISION_H = float(urdf_tree[1][2][1][0].attrib['length'])
+        # self.COLLISION_R = float(urdf_tree[1][2][1][0].attrib['radius'])
+        # COLLISION_SHAPE_OFFSETS = [float(s) for s in urdf_tree[1][2][0].attrib['xyz'].split(' ')]
+        # self.COLLISION_Z_OFFSET = COLLISION_SHAPE_OFFSETS[2]
 
-        self.GND_EFF_COEFF = float(urdf_tree[0].attrib['gnd_eff_coeff'])
         self.prop_diam = float(urdf_tree[0].attrib['prop_radius'])*2
-        DRAG_COEFF_XY = float(urdf_tree[0].attrib['drag_coeff_xy'])
-        DRAG_COEFF_Z = float(urdf_tree[0].attrib['drag_coeff_z'])
-        self.DRAG_COEFF = np.array([DRAG_COEFF_XY, DRAG_COEFF_XY, DRAG_COEFF_Z])
-        self.DW_COEFF_1 = float(urdf_tree[0].attrib['dw_coeff_1'])
-        self.DW_COEFF_2 = float(urdf_tree[0].attrib['dw_coeff_2'])
-        self.DW_COEFF_3 = float(urdf_tree[0].attrib['dw_coeff_3'])
+        self.prop_pitch = float(urdf_tree[0].attrib['pitch'])
+        # self.GND_EFF_COEFF = float(urdf_tree[0].attrib['gnd_eff_coeff'])
+        # DRAG_COEFF_XY = float(urdf_tree[0].attrib['drag_coeff_xy'])
+        # DRAG_COEFF_Z = float(urdf_tree[0].attrib['drag_coeff_z'])
+        # self.DRAG_COEFF = np.array([DRAG_COEFF_XY, DRAG_COEFF_XY, DRAG_COEFF_Z])
+        # self.DW_COEFF_1 = float(urdf_tree[0].attrib['dw_coeff_1'])
+        # self.DW_COEFF_2 = float(urdf_tree[0].attrib['dw_coeff_2'])
+        # self.DW_COEFF_3 = float(urdf_tree[0].attrib['dw_coeff_3'])
 
-        self.THRUST2WEIGHT_RATIO = float(urdf_tree[0].attrib['thrust2weight'])
-        self.max_rps = np.sqrt((self.THRUST2WEIGHT_RATIO*9.8) / (4*self.Ct))/60
+        # self.THRUST2WEIGHT_RATIO = float(urdf_tree[0].attrib['thrust2weight'])
+        # self.max_rpm = np.sqrt((self.THRUST2WEIGHT_RATIO*9.8) / (4*self.Ct))/60
+
+        print(urdf_tree[0])
+        vbat = float(urdf_tree[0].attrib['battery_v'])
+        kv = float(urdf_tree[0].attrib['kv'])
+        self.max_rpm = vbat*kv
+        self.max_speed = self.max_rpm*self.prop_pitch/60 # meters per second
 
     def load_model(self):
 
@@ -130,7 +181,7 @@ class QuadCopter:
         # Set initial velocity https://pybullet.org/Bullet/phpBB3/viewtopic.php?t=11793
         pb.resetBaseVelocity(
             self.ID, # model
-            state.lin_vel, # linear velocity
+            state.vel, # linear velocity
             state.ang_vel  # angular velocity
         )
 
@@ -158,7 +209,7 @@ class QuadCopter:
         pb.resetBasePositionAndOrientation(
                 self.ID,
                 state.world.pos,
-                pb.getQuaternionFromEuler(state.world.ang),
+                pb.getQuaternionFromEuler(state.world.rpy),
                 physicsClientId=self.client
             )
         self.set_initial_state()
@@ -185,7 +236,7 @@ class QuadCopter:
 
             observation_space[sensor.name]=sensor.observation_space
 
-        self.obsSpace = spaces.Dict(observation_space)
+        return spaces.Dict(observation_space)
     
     
     def compute_observation(self, timestemp):
@@ -205,7 +256,7 @@ class QuadCopter:
         ]))
 
 
-    def model(self, RPS, env, state=None):
+    def model(self, RPM, env, state=None):
         
         if state is None:
             state = copy.deepcopy(self.state)
@@ -214,17 +265,20 @@ class QuadCopter:
         # X axis is direction of drone forward movement
         # Y axis directed from right to left side of copter
         # Z axis directed upward from drone botton 
-        RPS = np.clip(RPS, 0 ,self.max_rps)
+        RPM = np.clip(RPM, 0 ,self.max_rpm)
 
-        thrust = self.Ct*env.rho*RPS*self.prop_diam**4
-        torque = self.Cq*env.rho*RPS*self.prop_diam**5 
+        # thrust = self.Ct*env.rho*(RPM**2)*self.prop_diam**4
+        # torque = self.Cq*env.rho*(RPM**2)*self.prop_diam**5         
+        thrust = self.Ct*(RPM**2)
+        torque = self.Cq*(RPM**2) 
         # CW rotation produces CCW torque
         # motors orientation means rotation direction CW = 1, CCW = -1
-        future_state.local.force = np.array([0, 0, sum(thrust)])
+        future_state.local.force = np.array([0, 0, np.sum(thrust)])
+        future_state.local.thrust = thrust.copy()
 
         moment_z = np.dot(self.motor_orientation, torque)      
-        moment_x = self.ly*np.dot([-1, 1, -1, 1], thrust)
-        moment_y = self.lx*np.dot([-1, -1, 1, 1], thrust)
+        moment_x = self.ly*np.dot([-1, -1, 1, 1], thrust)
+        moment_y = self.lx*np.dot([1, -1, 1, -1], thrust)
         axes_torques = np.array([
             moment_x, moment_y, moment_z
         ])
@@ -240,7 +294,7 @@ class QuadCopter:
         )
 
         future_state.local.ang_acc = angular_accel
-        future_state.local.acc = np.array([0, 0, sum(thrust)/self.mass])
+        future_state.local.acc = np.array([0, 0, sum(thrust)/self.mass]) 
 
         future_state.local.ang_vel = state.local.ang_vel + angular_accel*env.timestep
         future_state.local.vel = state.local.vel + np.array([0, 0, sum(thrust)/self.mass])*env.timestep
@@ -251,10 +305,12 @@ class QuadCopter:
     def apply_force(self, state):
 
         # pass
+        forces = state.local.thrust.tolist()
         for i in range(4):
             pb.applyExternalForce(self.ID,
                                  i,
-                                 forceObj=state.local.force.tolist(),
+                                #  forceObj=state.local.force.tolist(),
+                                 forceObj=[0, 0, forces[i]],
                                  posObj=[0, 0, 0],
                                  flags=pb.LINK_FRAME,
                                  physicsClientId=self.client
@@ -262,7 +318,7 @@ class QuadCopter:
         pb.applyExternalTorque(
             self.ID,
             4,
-            torqueObj=state.local.torque,
+            torqueObj=[0, 0, state.local.torque[2]],
             flags=pb.LINK_FRAME,
             physicsClientId=self.client
         )
@@ -270,10 +326,10 @@ class QuadCopter:
     
     def step(self, act, env):
 
-        obs = self.compute_observation(env.timestemp)
         future_state = self.model(act, env)
         self.apply_force(future_state)
         self.update_state(future_state)
+        obs = self.compute_observation(env.timestemp)
         return obs
 
 
@@ -286,18 +342,24 @@ class QuadCopter:
         lin_vel, ang_vel = pb.getBaseVelocity(self.ID, self.client)
         pos, qtr = pb.getBasePositionAndOrientation(self.ID, self.client)
 
-        self.state.world.vel = lin_vel
-        self.state.world.ang_vel = ang_vel
-        self.state.world.pos = pos
-        self.state.world.qtr = qtr
+        self.state.world.vel = np.array(lin_vel)
+        self.state.world.ang_vel = np.array(ang_vel)
+        self.state.world.pos = np.array(pos)
+        self.state.world.qtr = np.array(qtr)
 
-        local_lin_vel = np.dot(
+        local_g = np.dot(
             self.state.R.T,
-            lin_vel
-        )
+            np.array([0, 0, -9.8]))
 
-        self.state.local.vel = new_state.local.vel
-        self.state.local.ang_vel = new_state.local.ang_vel
+        self.state.local.acc += local_g
+
+        self.state.world.acc = np.dot(
+            self.state.R, new_state.local.acc)
+        self.state.world.ang_acc = np.dot(
+            self.state.R, new_state.local.ang_acc)
+
+        self.state.local.vel = np.dot(self.state.R.T, lin_vel)#new_state.local.vel
+        self.state.local.ang_vel = np.dot(self.state.R.T, ang_vel)#new_state.local.ang_vel
 
 
     def set_sensor_ticks(self, env_freq):
@@ -363,14 +425,13 @@ class GymCopter(QuadCopter):
         self.GND_EFF_H_CLIP = 0.25 * self.PROP_RADIUS * np.sqrt((15 * self.MAX_RPM**2 * self.KF * self.GND_EFF_COEFF) / self.MAX_THRUST)
 
 
-    def model(self, RPS, env, state=None):
+    def model(self, rpm, env, state=None):
 
         if state is None:
             state = copy.deepcopy(self.state)
         
         future_state = State()
 
-        rpm = RPS*60
         forces = np.array(rpm**2)*self.KF
         torques = np.array(rpm**2)*self.KM
         if self.drone_model == DroneModel.RACE:
