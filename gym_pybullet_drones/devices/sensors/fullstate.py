@@ -16,11 +16,27 @@ class FullState(Device):
         )
 
     def make_obs(self):
+        proj_grav = np.dot(
+            self._base.state.R.T,
+            np.array([0, 0, -9.8])
+        )
+
         return (
             np.copy(self._base.state.world.pos), 
             np.copy(self._base.state.world.rpy), 
+            np.copy(proj_grav), 
             np.copy(self._base.state.world.vel), 
             np.copy(self._base.state.world.ang_vel), 
-            np.copy(self._base.state.world.acc), 
-            np.copy(self._base.state.world.ang_acc)
+
+            np.copy(self._base.state.local.vel), 
+            np.copy(self._base.state.local.ang_vel), 
         )
+
+        # return (
+        #     np.copy(self._base.state.world.pos), 
+        #     np.copy(proj_grav), 
+        #     np.copy(self._base.state.world.vel), 
+        #     np.copy(self._base.state.world.ang_vel), 
+        #     np.copy(self._base.state.world.acc), 
+        #     np.copy(self._base.state.world.ang_acc)
+        # )

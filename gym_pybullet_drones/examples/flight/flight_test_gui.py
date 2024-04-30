@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO, SAC, TD3
-from gym_pybullet_drones.envs.single_agent_rl import HoverIMU, HoverGPS, HoverFullState
+from gym_pybullet_drones.envs.single_agent_rl import FlightFullState
 import time
 # import torch
 import os
@@ -8,16 +8,16 @@ import numpy as np
 
 def main(test=True):
 
-    savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover/multienv/' 
+    savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/flight/multienv/' 
     savepath= os.path.join(
         savedir,
         # 'PPO_35'
-        'PPO_39'
+        'PPO_3'
     )
     trainer = PPO
     # # trainer = SAC
 
-    env_class = HoverFullState
+    env_class = FlightFullState
 
     # policy_kwargs = dict(net_arch=dict(pi=[64, 64], qf=[64, 64]))
 
@@ -27,7 +27,8 @@ def main(test=True):
 
     x = pb.addUserDebugParameter('x', -1, 1, 0.)
     y = pb.addUserDebugParameter('y', -1, 1, 0.)
-    z = pb.addUserDebugParameter('z', 0.2, 2, 1.)
+    z = pb.addUserDebugParameter('z', -1, 1, 1.)
+    speed = pb.addUserDebugParameter('z', 0., env.drone.max_speed, 0.)
     
     state, _=env.reset()
 
@@ -41,10 +42,11 @@ def main(test=True):
     rew = 0
     while test:
 
-        env.target_pos = np.array([
+        env.command = np.array([
             pb.readUserDebugParameter(x),
             pb.readUserDebugParameter(y),
             pb.readUserDebugParameter(z),
+            pb.readUserDebugParameter(speed),
         ])
 
 

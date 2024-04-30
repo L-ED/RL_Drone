@@ -8,6 +8,7 @@ from gym_pybullet_drones.devices import Camera, mpu6000, Barometer, FullState
 from gym_pybullet_drones.utils.state import State
 from torch import sigmoid
 from copy import deepcopy
+import torch
 
 class FlightFullState(BaseRL):
 
@@ -20,14 +21,30 @@ class FlightFullState(BaseRL):
             scene_objects=[], 
             visualize=False, 
             record=False, 
-            realtime=False
+            realtime=False, 
+            max_step = 200, 
+            seed = 42, 
+            rank = 0
+
         ):
+
+        self.rank = rank
+        self.set_seed(seed)
+
+        self.elem_num = 17
+
+        self.max_step = max_step
 
         self.max_g = 2*9.8
         self.max_ang_vel = 2 #10 
-        self.max_radius = 1
 
-        self.target_pos = np.array([10, 0, 1])
+        self.alpha = 0.01
+        # self.max_speed = deepcopy(drone.max_speed)/2
+        self.command = np.array(
+            [1, 0, 0, 1]
+        )
+
+        self.last_action = np.zeros(4)
         self.randomize = True
 
         if client is None:
@@ -39,7 +56,8 @@ class FlightFullState(BaseRL):
         if drone is None:
 
             sensors= [
-                FullState(500)
+                FullState(50),
+                mpu6000(50)
             ]
 
             state = State()
@@ -56,63 +74,89 @@ class FlightFullState(BaseRL):
         super().__init__(client, drone, control_system, logger, scene_objects, visualize, record, realtime)
         
 
+    def set_seed(self, seed):
+        np.random.seed(seed)
+        # torch.random.seed(seed)
+        torch.random.manual_seed(seed)
+        
+
     def normalize_observation_space(self):
 
         self.observation_space = spaces.Box(
-            low=-1*np.ones((1, 15)),
-            high=np.ones((1, 15)),
+            low=-1*np.ones((1, self.elem_num)),
+            high=np.ones((1, self.elem_num)),
             dtype=np.float32
         )
 
 
+    
     def preprocess_action(self, action):
-        return self.drone.max_rpm/(1+np.exp(-action*3))
-        
+        self.last_action = action.copy()
+        return self.drone.max_rpm/(1+np.exp(-action))
+    
+
+    def reset_buffers(self):
+        self.last_action = np.zeros(4)
+
+
+    # def reset(self, seed=None, options=None):
+    #     # action = self.create_initial_action()
+    #     # obs = self.drone.step(action, self)
+    #     obs, inf = super().reset()
+    #     # print('IM HERE')
+    #     return self.preprocess_observation(obs), inf
+
+
 
     def preprocess_observation(self, observation):
 
-        pos, ang, vel, a_vel, acc, a_acc = observation['FS_0'] 
-        targ_disp = self.target_pos - pos
+        pos = observation['FS_0'][0]
+        ang = observation['FS_0'][1]
+        proj_grav = observation['FS_0'][2]
+
+        world_lin_vel = observation['FS_0'][3]
+        world_ang_vel = observation['FS_0'][4]
+
+        local_lin_vel = observation['FS_0'][5]
+        local_ang_vel = observation['FS_0'][6]
+
+        imu = observation['IMU_0'] 
 
         stats = [
-            pos,
-            ang, 
-            vel, 
-            a_vel,
-            targ_disp
+            proj_grav,
+            local_ang_vel,
+            local_lin_vel, 
+            self.command,
+            self.last_action
         ]
 
-        # for i in range(len(stats)):
-        #     value = stats[i]
-        #     value_norm = np.linalg.norm(value)
-        #     if value_norm != 0:
-        #         value = value/value_norm 
-        #     stats[i] = value
-
-        return np.concatenate(stats).reshape((1, 15))
+        return np.concatenate(stats).reshape((1, self.elem_num))
+        # return np.concatenate(stats).reshape((1, 12))
     
 
     def check_termination(self):
         
         term = False
-        pos = np.copy(self.drone.state.world.pos)
-        pos[2] -= 1
-        is_out = sum(pos**2) > sum(self.target_pos**2)*1.5
-        if is_out:
-            term = True
+        
         return term
+    
+
+    def check_truncation(self):
+        trunc = False
+        if self.step_idx > self.max_step:
+            trunc = True
+        return trunc
     
 
     def create_initial_state(self):
         state = super().create_initial_state()
-        if self.randomize:
-            new_pos = np.random.rand(3)
-            new_pos[:2] -= 0.5
-            new_pos[2] = max(new_pos[2]*2, 0.2)
-        else:
-            new_pos = np.zeros(3)
-            new_pos[2] = 0.2
-
+        new_pos = np.array([0, 0, 20])
+        command = np.random.rand(4)
+        command[3] *= self.drone.max_speed/(2-self.alpha)
+        command[:2] *= self.alpha
+        command[:3] /= np.linalg.norm(command[:3])
+        self.command = command
+        # print(self.command)
         state.world.pos = new_pos
         return state
     
@@ -123,31 +167,20 @@ class FlightFullState(BaseRL):
 
     def reward(self):
 
-        safe_radius= self.max_radius
-
         state = deepcopy(self.drone.state)
 
-        disp = self.target_pos - state.world.pos
-        displ_dir = disp/np.linalg.norm(disp)
-
-        displ_normalized = np.sum(disp**2)/(safe_radius)**2
-
         vel = state.world.vel
-        flight_dir = vel/np.linalg.norm(vel)
-
-        vel_normalized = np.sum(vel**2)/(self.drone.max_speed/2)**2
-
-        closenes_reward = (1-displ_normalized)#*(1-vel_normalized)
-        if np.sum(disp**2)<0.1:
-            closenes_reward +=1
-
-        dir_reward = np.dot(flight_dir, displ_dir)
-        # if dir_reward < 0:
-        #     dir_reward *= np.linalg.norm(vel)
-
-        # angles_reward = -np.linalg.norm(state.world.ang_vel) 
-
-        reward = dir_reward #+ closenes_reward 
-        # reward = (1-displ_normalized)#dir_reward + angles_reward + closenes_reward 
+        flight_mag = np.linalg.norm(vel)
+        flight_dir = vel/flight_mag
+        
+        dir_reward = np.dot(flight_dir, self.command[:3])
+        mag_diff = np.exp(-(flight_mag - self.command[3])**2)
+        
+        reward = dir_reward*mag_diff #+ dir_reward*0.3
         
         return reward
+
+
+    def set_alpha(self, alpha):
+        print('setting alpha to ', alpha)
+        self.alpha = alpha

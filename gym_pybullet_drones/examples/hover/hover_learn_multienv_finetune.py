@@ -26,7 +26,7 @@ def get_save_path(savedir, dirname='PPO'):
 
 def main(test=True):
 
-    proc_num = 6
+    proc_num = 5
 
     savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover/multienv' 
     savepath = get_save_path(savedir)
@@ -35,6 +35,7 @@ def main(test=True):
 
     env_class = HoverFullState
     vec_env = SubprocVecEnv([make_env(env_class, i) for i in range(proc_num)])
+    
     eval_env = HoverFullState()
 
     # env.randomize = False
@@ -44,18 +45,22 @@ def main(test=True):
         verbose=0,
         tensorboard_log=savedir,
         # policy_kwargs=policy_kwargs
-        n_steps=4000,
-        # ent_coef=0.1
+        n_steps=4000
     )
 
-    eval_freq = 20000
+
+    eval_freq = 10000
     eval_callback = EvalCallback(
         eval_env, best_model_save_path=savepath,
         log_path=savepath, eval_freq=eval_freq,
         deterministic=True, render=False
     )
 
-    agent.learn(1500000, callback=eval_callback)
+    agent = trainer.load(
+        '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover/multienv/best_model.zip', 
+        env=vec_env)
+    
+    agent.learn(4000000, callback=eval_callback)
 
     env = env_class(visualize=True)
     # env.randomize = False

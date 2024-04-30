@@ -22,23 +22,27 @@ class HoverFullState(BaseRL):
             visualize=False, 
             record=False, 
             realtime=False, 
-            max_step = 2000, 
+            max_step = 200, 
             seed = 42, 
+            rank = 0
 
         ):
 
+        self.rank = rank
         self.set_seed(seed)
 
-        self.elem_num = 15#18
+        self.elem_num = 16
 
         self.max_step = max_step
 
         self.max_g = 2*9.8
-        self.max_ang_vel = 2 #10 
+        self.max_ang_vel = 2 
         self.max_radius = 1
 
         self.target_pos = np.array([0, 0, 1])
+        self.last_action = np.zeros(4)
         self.randomize = True
+        self.validation = False
 
         if client is None:
             if visualize:
@@ -49,8 +53,8 @@ class HoverFullState(BaseRL):
         if drone is None:
 
             sensors= [
-                FullState(500),
-                mpu6000()
+                FullState(50),
+                mpu6000(50)
             ]
 
             state = State()
@@ -69,7 +73,8 @@ class HoverFullState(BaseRL):
 
     def set_seed(self, seed):
         np.random.seed(seed)
-        torch.random.seed(seed)
+        # torch.random.seed(seed)
+        torch.random.manual_seed(seed)
         
 
     def normalize_observation_space(self):
@@ -85,28 +90,61 @@ class HoverFullState(BaseRL):
     def preprocess_action(self, action):
         self.last_action = action.copy()
         return self.drone.max_rpm/(1+np.exp(-action))
-        
+    
+
+    def reset_buffers(self):
+        self.last_action = np.zeros(4)
+
+
+    # def reset(self, seed=None, options=None):
+    #     # action = self.create_initial_action()
+    #     # obs = self.drone.step(action, self)
+    #     obs, inf = super().reset()
+    #     # print('IM HERE')
+    #     return self.preprocess_observation(obs), inf
+
+
 
     def preprocess_observation(self, observation):
 
         max_disp = self.max_radius
         # max_vel = self.
 
-        pos, ang, vel, a_vel, acc, a_acc = observation['FS_0'] 
+        # print("OBS", 'rank', self.rank, observation)
+        # pos, ang, vel, a_vel, acc, a_acc = observation['FS_0'] 
+        pos = observation['FS_0'][0]
+        ang = observation['FS_0'][1]
+        proj_grav = observation['FS_0'][2]
+
+        world_lin_vel = observation['FS_0'][3]
+        world_ang_vel = observation['FS_0'][4]
+
+        local_lin_vel = observation['FS_0'][5]
+        local_ang_vel = observation['FS_0'][6]
+
         imu = observation['IMU_0'] 
         targ_disp = self.target_pos - pos
 
         stats = [
-            pos,
-            ang,
-            a_vel,
-            vel, 
-            # imu[:3],
-            # imu[3:],
-            # a_acc, 
-            # acc,
-            targ_disp
+            proj_grav,
+            local_ang_vel,
+            local_lin_vel, 
+            targ_disp,
+            self.last_action
         ]
+
+
+        # stats = [
+        #     pos,
+        #     ang,
+        #     world_ang_vel,
+        #     world_lin_vel, 
+        #     # imu[:3],
+        #     # imu[3:],
+        #     # a_acc, 
+        #     # acc,
+        #     targ_disp
+        # ]
 
         # for i in range(len(stats)):
         #     value = stats[i]
@@ -123,10 +161,15 @@ class HoverFullState(BaseRL):
         
         term = False
         pos = np.copy(self.drone.state.world.pos)
+        if pos[2] < 0.05:
+            term = True
+
         pos[2] -= 1
-        is_out = sum(pos**2) > self.max_radius**2
+        # is_out = sum(pos**2) > self.max_radius**2
+        is_out = max(pos) > self.max_radius
         if is_out:
             term = True
+        
         return term
     
 
@@ -134,7 +177,7 @@ class HoverFullState(BaseRL):
         trunc = False
         if self.step_idx > self.max_step:
             trunc = True
-        return trunc
+        return trunc and not self.validation
     
 
     def create_initial_state(self):
@@ -143,7 +186,8 @@ class HoverFullState(BaseRL):
             new_pos = np.random.rand(3)
             # new_pos = np.zeros(3)*2
             new_pos[:2] -= 0.5
-            new_pos[2] = max(new_pos[2]*2, 0.2)
+            new_pos = new_pos*self.max_radius
+            new_pos[2] = max(new_pos[2], 0.2)
         else:
             new_pos = np.zeros(3)
             new_pos[2] = 0.2
@@ -163,7 +207,7 @@ class HoverFullState(BaseRL):
 
         state = deepcopy(self.drone.state)
 
-        disp = np.array([0, 0, 1]) - state.world.pos
+        disp = self.target_pos - state.world.pos
         displ_dir = disp/np.linalg.norm(disp)
 
         displ_normalized = np.sum(disp**2)/(safe_radius)**2
@@ -177,13 +221,17 @@ class HoverFullState(BaseRL):
 
         dir_reward = np.dot(flight_dir, displ_dir)
 
+        # if pos[2] < 0.05
+
         if np.sum(disp**2)<0.2:
-            closenes_reward +=1
+            # closenes_reward +=1
             dir_reward=1
 
-        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)) 
+        # print(state.world.ang_vel, state.local.ang_vel)
+        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)*0.3) 
+        # print(closenes_reward)
+        reward = closenes_reward*angles_reward
+        # reward = closenes_reward + angles_reward + dir_reward*0.1
 
-        reward = dir_reward*0.1 + angles_reward*0.1 + closenes_reward 
-        # reward = (1-displ_normalized)#dir_reward + angles_reward + closenes_reward 
         
         return reward

@@ -10,7 +10,7 @@ def main(test=True):
     savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover' 
     savepath= os.path.join(
         savedir,
-        '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover/multiple/model_2000_2000.zip'
+        '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover/multienv/PPO_25/best_model.zip'
         # 'best'
         # 'best_model'
         # "best_model_ppo_longlearn"

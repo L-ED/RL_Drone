@@ -69,17 +69,18 @@ class Base(gym.Env):
     def reset(self):
         self.step_idx=0
         self.timestemp=0
-        np.random.seed()
+        # np.random.seed()
         
         for sensor in self.drone.sensors:
             sensor.counter = 0
 
-        pb.resetSimulation(physicsClientId=self.client)
-        self.init_sim()
+        # pb.resetSimulation(physicsClientId=self.client)
+        # self.init_sim()
         state = self.create_initial_state()
         self.drone.reset_state(state)
         action = self.create_initial_action()
         obs = self.drone.step(action, self)
+        # print("DRONE", obs)
         return obs, {}
     
 
@@ -138,7 +139,7 @@ class Base(gym.Env):
             )
 
         vehicle.load_model()
-    
+
 
     def reward(self):
         return 0

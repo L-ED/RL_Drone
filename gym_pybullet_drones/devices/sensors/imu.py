@@ -71,7 +71,7 @@ class SensorNoizeModel:
 
 
 
-def mpu6000(base=None): #spi(low) - 100kHZ, spi(high) - 1MHZ, SPI(readonly) - 20MHZ, I2C - 100/400 (kHZ) 
+def mpu6000(freq=1e3, base=None): #spi(low) - 100kHZ, spi(high) - 1MHZ, SPI(readonly) - 20MHZ, I2C - 100/400 (kHZ) 
     G=9.8
 
     # gyro = {
@@ -95,7 +95,7 @@ def mpu6000(base=None): #spi(low) - 100kHZ, spi(high) - 1MHZ, SPI(readonly) - 20
     }
 
     return IMU(
-        frequency= int(1e3),
+        frequency= int(freq),
         accel_params=accel,
         gyro_params=gyro,
         base=base

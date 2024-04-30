@@ -24,10 +24,14 @@ class BaseRL(Base):
     def normalize_observation_space(self):
         pass
 
+    def reset_buffers(self):
+        pass
 
     def step(self, action: Any) -> Tuple[Any, SupportsFloat, bool, bool, Dict[str, Any]]:
         action = self.preprocess_action(action)
+        # obs, reward, terminated, truncated, info = super().step(action)
         obs, reward, terminated, truncated, info = super().step(action)
+        # done = terminated or truncated
         obs = self.preprocess_observation(obs)
         return obs, reward, terminated, truncated, info
     
@@ -36,5 +40,8 @@ class BaseRL(Base):
               seed=None,
               options=None):
         
+        self.reset_buffers()
+        seed = np.random.randint(0, 65000)
+        np.random.seed(seed=seed)
         obs, inf =  super().reset()
         return self.preprocess_observation(obs), inf
