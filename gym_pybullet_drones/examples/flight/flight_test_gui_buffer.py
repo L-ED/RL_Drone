@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO, SAC, TD3
-from gym_pybullet_drones.envs.single_agent_rl import FlightFullState
+from gym_pybullet_drones.envs.single_agent_rl import FlightFullStateBuffer
 from scipy.spatial.transform import Rotation as R
 
 import time
@@ -10,17 +10,17 @@ import numpy as np
 
 def main(test=True):
 
-    savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/flight/multienv/' 
+    savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/flight/multienv/buffer' 
     savepath= os.path.join(
         savedir,
         # 'PPO_49',
-        'PPO_56',
+        'PPO_1',
 
     )
     trainer = PPO
     # # trainer = SAC
 
-    env_class = FlightFullState
+    env_class = FlightFullStateBuffer
 
     # policy_kwargs = dict(net_arch=dict(pi=[64, 64], qf=[64, 64]))
 
@@ -60,8 +60,7 @@ def main(test=True):
         rot = R.from_euler("xyz", command[:3]*180, degrees=True)
         command[:3] = rot.apply([0, 0, 1])
         # print(command)
-        # env.command = command
-        env.command = command[:3]*command[3]
+        env.command = command
 
         action, _ = agent.predict(
             state.reshape(1,-1),

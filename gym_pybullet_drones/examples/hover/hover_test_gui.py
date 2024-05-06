@@ -12,7 +12,9 @@ def main(test=True):
     savepath= os.path.join(
         savedir,
         # 'PPO_35'
-        'PPO_39'
+        # 'PPO_39' #best
+        'PPO_43'
+        # 'curriculum/PPO_2'
     )
     trainer = PPO
     # # trainer = SAC
@@ -25,9 +27,10 @@ def main(test=True):
     env.randomize = False
     env.validation = True
 
-    x = pb.addUserDebugParameter('x', -1, 1, 0.)
-    y = pb.addUserDebugParameter('y', -1, 1, 0.)
-    z = pb.addUserDebugParameter('z', 0.2, 2, 1.)
+    x = pb.addUserDebugParameter('x', -1, 10, 0.)
+    y = pb.addUserDebugParameter('y', -1, 10, 0.)
+    z = pb.addUserDebugParameter('z', 0.2, 20, 1.)
+    reset = pb.addUserDebugParameter('reset', 1, 0, 1)
     
     state, _=env.reset()
 
@@ -40,6 +43,8 @@ def main(test=True):
     state, _=env.reset()
     rew = 0
     while test:
+
+        term = pb.readUserDebugParameter(reset)
 
         env.target_pos = np.array([
             pb.readUserDebugParameter(x),
@@ -55,11 +60,12 @@ def main(test=True):
 
 
         state, reward, terminated, truncated, info = env.step(action)
+        print(state[0][9:12])
         
         rew+=reward
 
         time.sleep(env.timestep)
-        if terminated or truncated:
+        if terminated or truncated or not term:
             print(rew)
             rew=0
             state, _=env.reset()

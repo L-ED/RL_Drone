@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO, SAC, TD3
-from gym_pybullet_drones.envs.single_agent_rl import FlightFullState
+from gym_pybullet_drones.envs.single_agent_rl import FlightFullState, FlightFullStateBuffer
 import time
 import torch
 import numpy as np
@@ -67,14 +67,14 @@ def main(test=False):
 
     proc_num = 6
 
-    savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/flight/multienv' 
+    savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/flight/multienv/buffer' 
     savepath = get_save_path(savedir)
 
     trainer = PPO
 
-    env_class = FlightFullState
+    env_class = FlightFullStateBuffer
     vec_env = SubprocVecEnv([make_env(env_class, i) for i in range(proc_num)])
-    eval_env = FlightFullState()
+    eval_env = FlightFullStateBuffer()
 
     # env.randomize = False
     agent = trainer(

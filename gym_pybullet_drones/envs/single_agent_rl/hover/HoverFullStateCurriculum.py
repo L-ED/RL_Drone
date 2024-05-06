@@ -1,6 +1,5 @@
 from gym_pybullet_drones.envs.single_agent_rl import BaseRL
 from gymnasium import spaces
-from scipy.spatial.transform import Rotation as R
 import numpy as np
 import pybullet as pb
 
@@ -11,7 +10,7 @@ from torch import sigmoid
 from copy import deepcopy
 import torch
 
-class FlightFullState(BaseRL):
+class HoverFullStateCurriculum(BaseRL):
 
     def __init__(
             self, 
@@ -32,27 +31,22 @@ class FlightFullState(BaseRL):
         self.rank = rank
         self.set_seed(seed)
 
-        self.elem_num = 17 - 1
+        self.elem_num = 16
 
         self.max_step = max_step
 
         self.max_g = 2*9.8
-        self.max_ang_vel = 2 #10 
-        self.max_vel=40
+        self.max_ang_vel = 2 
+        # self.max_radius = 1
+        self.max_radius = 4
 
-        self.alpha = 0.01
-        # self.max_speed = deepcopy(drone.max_speed)/2
-        self.command = np.array(
-            # [1, 0, 0, 1]
-            [0, 0, 20]
-        )
+        self.alpha = 0.2
 
-        # self.prev_lin_vel
-        # self.prev_lin_vel
-        self.history = []
-
+        # self.target_pos = np.array([0, 0, 1])
+        self.target_pos = np.array([0, 0, 5])
         self.last_action = np.zeros(4)
         self.randomize = True
+        self.validation = False
 
         if client is None:
             if visualize:
@@ -96,6 +90,7 @@ class FlightFullState(BaseRL):
         )
 
 
+    
     def preprocess_action(self, action):
         self.last_action = action.copy()
         return self.drone.max_rpm/(1+np.exp(-action))
@@ -116,6 +111,11 @@ class FlightFullState(BaseRL):
 
     def preprocess_observation(self, observation):
 
+        max_disp = self.max_radius
+        # max_vel = self.
+
+        # print("OBS", 'rank', self.rank, observation)
+        # pos, ang, vel, a_vel, acc, a_acc = observation['FS_0'] 
         pos = observation['FS_0'][0]
         ang = observation['FS_0'][1]
         proj_grav = observation['FS_0'][2]
@@ -127,14 +127,37 @@ class FlightFullState(BaseRL):
         local_ang_vel = observation['FS_0'][6]
 
         imu = observation['IMU_0'] 
+        targ_disp = self.target_pos - pos
+        targ_disp = np.clip(targ_disp, -1, 1)
+
 
         stats = [
             proj_grav,
             local_ang_vel,
             local_lin_vel, 
-            self.command,
+            targ_disp,
             self.last_action
         ]
+
+
+        # stats = [
+        #     pos,
+        #     ang,
+        #     world_ang_vel,
+        #     world_lin_vel, 
+        #     # imu[:3],
+        #     # imu[3:],
+        #     # a_acc, 
+        #     # acc,
+        #     targ_disp
+        # ]
+
+        # for i in range(len(stats)):
+        #     value = stats[i]
+        #     value_norm = np.linalg.norm(value)
+        #     if value_norm != 0:
+        #         value = value/value_norm 
+        #     stats[i] = value
 
         return np.concatenate(stats).reshape((1, self.elem_num))
         # return np.concatenate(stats).reshape((1, 12))
@@ -143,6 +166,15 @@ class FlightFullState(BaseRL):
     def check_termination(self):
         
         term = False
+        pos = np.copy(self.drone.state.world.pos)
+        if pos[2] < 0.05:
+            term = True
+
+        pos[2] -= 1
+        # is_out = sum(pos**2) > self.max_radius**2
+        is_out = max(pos) > self.max_radius
+        if is_out:
+            term = True and not self.validation
         
         return term
     
@@ -151,105 +183,76 @@ class FlightFullState(BaseRL):
         trunc = False
         if self.step_idx > self.max_step:
             trunc = True
-        return trunc
+        return trunc and not self.validation
     
 
     def create_initial_state_(self):
         state = super().create_initial_state()
-        new_pos = np.array([0, 0, 20])
-        command = (np.random.rand(4)*2 - 1)*self.alpha
-        command[0]=0
-        rot = R.from_euler("zxy", command[:3]*180, degrees=True)
-        command[:3] = rot.apply([0, 0, 1])
+        if self.randomize:
+            new_pos = np.random.rand(3)
+            # new_pos = np.zeros(3)*2
+            new_pos[:2] -= 0.5
+            new_pos = new_pos*self.max_radius
+            new_pos[2] = max(new_pos[2], 0.2)
+        else:
+            new_pos = np.zeros(3)
+            new_pos[2] = 0.2
 
-        # command[3] *= self.max_vel/(2-self.alpha)
-        command[3] = self.max_vel*(0.5 + 0.5*command[3])
-        self.command = command
-        print(self.command)
         state.world.pos = new_pos
         return state
     
 
     def create_initial_state(self):
         state = super().create_initial_state()
-        new_pos = np.array([0, 0, 20])
-        command = (np.random.rand(4)*2 - 1)*self.alpha
-        command[0]=0
-        rot = R.from_euler("zxy", command[:3]*180, degrees=True)
-        command[:3] = rot.apply([0, 0, 1])
+        if self.randomize:
+            delta = (np.random.rand(3)* - 1)*self.max_radius*self.alpha
+            new_pos = self.target_pos + delta
+        else:
+            new_pos = np.zeros(3)
+            new_pos[2] = 0.2
 
-        # command[3] *= self.max_vel/(2-self.alpha)
-        command[3] = self.max_vel*(0.5 + 0.5*command[3])
-        self.command = command[:3]*command[3]
-        print(self.command)
         state.world.pos = new_pos
         return state
-
+    
 
     def create_initial_action(self):
         return np.zeros(4)
     
 
-    def reward_(self):
-
-        state = deepcopy(self.drone.state)
-
-        comm = self.command.copy()
-        vel = state.world.vel
-        flight_mag = np.linalg.norm(vel)
-        flight_dir = vel/flight_mag
-        
-        dir_reward = np.dot(flight_dir, self.command[:3])
-
-        # mag_abs_diff = np.abs(flight_mag - self.command[3])/self.command[3]
-        # mag_sq_diff = (flight_mag - self.command[3])**2
-        mag_sq_diff = ((flight_mag - self.command[3])/self.command[3])**2
-        mag_diff = np.exp(-mag_sq_diff)
-        self.save_stats(dir_reward.copy(), mag_sq_diff.copy())
-        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)*0.1)
-
-        # reward = (dir_reward + mag_diff)*angles_reward 
-        # reward = (dir_reward + mag_sq_diff)*angles_reward 
-        reward = np.exp(-np.sum(((vel-comm[:3]*comm[3])/self.command[3])**2))
-        # reward = (1+dir_reward)*mag_diff
-        # print(mag_sq_diff, mag_diff, flight_mag, self.command[3])
-
-        return reward
-    
-
     def reward(self):
 
+        # safe_radius= 0.3
+        safe_radius= self.max_radius
+
         state = deepcopy(self.drone.state)
 
-        comm = self.command.copy()
+        disp = self.target_pos - state.world.pos
+        displ_dir = disp/np.linalg.norm(disp)
+
+        displ_normalized = np.sum(disp**2)/(safe_radius)**2
+
         vel = state.world.vel
-        flight_mag = np.linalg.norm(vel)
-        comm_mag = np.linalg.norm(comm)
-        flight_dir = vel/flight_mag
-        
-        dir_reward = np.dot(flight_dir, self.command[:3]/comm_mag)
+        flight_dir = vel/np.linalg.norm(vel)
 
-        # mag_abs_diff = np.abs(flight_mag - self.command[3])/self.command[3]
-        # mag_sq_diff = (flight_mag - self.command[3])**2
-        mag_sq_diff = ((flight_mag - comm_mag)/comm_mag)**2
-        mag_diff = np.exp(-mag_sq_diff)
-        self.save_stats(dir_reward.copy(), mag_sq_diff.copy())
-        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)*0.1)
+        vel_normalized = np.sum(vel**2)/(self.drone.max_speed/2)**2
 
-        # reward = (dir_reward + mag_diff)*angles_reward 
-        # reward = (dir_reward + mag_sq_diff)*angles_reward 
-        reward = np.exp(-np.sum(((vel-comm)/comm_mag)**2))
-        # reward = (1+dir_reward)*mag_diff
-        # print(mag_sq_diff, mag_diff, flight_mag, self.command[3])
+        closenes_reward = (1-displ_normalized)#*(1-vel_normalized)
+
+        dir_reward = np.dot(flight_dir, displ_dir)
+
+        # if pos[2] < 0.05
+
+        if np.sum(disp**2)<0.2:
+            # closenes_reward +=1
+            dir_reward=1
+
+        # print(state.world.ang_vel, state.local.ang_vel)
+        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)*0.3) 
+        # print(closenes_reward)
+        reward = closenes_reward*angles_reward
+        # reward = closenes_reward + angles_reward + dir_reward*0.1
 
         return reward
-    
-
-    def save_stats(self, flight_err, mag_err):
-        if self.step_idx > 0.3*self.max_step:
-            self.history.append([flight_err, mag_err])
-        else:
-            self.history = []
 
 
     def set_alpha(self, alpha):

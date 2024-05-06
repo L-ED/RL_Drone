@@ -10,7 +10,7 @@ from torch import sigmoid
 from copy import deepcopy
 import torch
 
-class HoverFullState(BaseRL):
+class HoverFullState2(BaseRL):
 
     def __init__(
             self, 
@@ -125,8 +125,6 @@ class HoverFullState(BaseRL):
         imu = observation['IMU_0'] 
         targ_disp = self.target_pos - pos
         targ_disp = np.clip(targ_disp, -1, 1)
-
-
         stats = [
             proj_grav,
             local_ang_vel,
@@ -135,7 +133,28 @@ class HoverFullState(BaseRL):
             self.last_action
         ]
 
+
+        # stats = [
+        #     pos,
+        #     ang,
+        #     world_ang_vel,
+        #     world_lin_vel, 
+        #     # imu[:3],
+        #     # imu[3:],
+        #     # a_acc, 
+        #     # acc,
+        #     targ_disp
+        # ]
+
+        # for i in range(len(stats)):
+        #     value = stats[i]
+        #     value_norm = np.linalg.norm(value)
+        #     if value_norm != 0:
+        #         value = value/value_norm 
+        #     stats[i] = value
+
         return np.concatenate(stats).reshape((1, self.elem_num))
+        # return np.concatenate(stats).reshape((1, 12))
     
 
     def check_termination(self):
@@ -149,7 +168,7 @@ class HoverFullState(BaseRL):
         # is_out = sum(pos**2) > self.max_radius**2
         is_out = max(pos) > self.max_radius
         if is_out:
-            term = True and not self.validation
+            term = True
         
         return term
     
@@ -209,9 +228,10 @@ class HoverFullState(BaseRL):
             dir_reward=1
 
         # print(state.world.ang_vel, state.local.ang_vel)
-        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)*0.1) 
+        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)*0.3) 
         # print(closenes_reward)
         reward = closenes_reward*angles_reward
         # reward = closenes_reward + angles_reward + dir_reward*0.1
 
+        
         return reward

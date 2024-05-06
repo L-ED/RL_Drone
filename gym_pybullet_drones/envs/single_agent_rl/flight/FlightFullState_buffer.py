@@ -11,7 +11,7 @@ from torch import sigmoid
 from copy import deepcopy
 import torch
 
-class FlightFullState(BaseRL):
+class FlightFullStateBuffer(BaseRL):
 
     def __init__(
             self, 
@@ -32,7 +32,7 @@ class FlightFullState(BaseRL):
         self.rank = rank
         self.set_seed(seed)
 
-        self.elem_num = 17 - 1
+        self.elem_num = 17 + 9
 
         self.max_step = max_step
 
@@ -43,12 +43,13 @@ class FlightFullState(BaseRL):
         self.alpha = 0.01
         # self.max_speed = deepcopy(drone.max_speed)/2
         self.command = np.array(
-            # [1, 0, 0, 1]
-            [0, 0, 20]
+            [1, 0, 0, 1]
         )
 
-        # self.prev_lin_vel
-        # self.prev_lin_vel
+        self.prev_lin_vel = np.zeros(shape=3)
+        self.prev_ang_vel = np.zeros(shape=3)
+        self.prev_proj_grav = np.zeros(shape=3)
+        self.prev_command = np.zeros(shape=4)
         self.history = []
 
         self.last_action = np.zeros(4)
@@ -105,15 +106,6 @@ class FlightFullState(BaseRL):
         self.last_action = np.zeros(4)
 
 
-    # def reset(self, seed=None, options=None):
-    #     # action = self.create_initial_action()
-    #     # obs = self.drone.step(action, self)
-    #     obs, inf = super().reset()
-    #     # print('IM HERE')
-    #     return self.preprocess_observation(obs), inf
-
-
-
     def preprocess_observation(self, observation):
 
         pos = observation['FS_0'][0]
@@ -133,8 +125,15 @@ class FlightFullState(BaseRL):
             local_ang_vel,
             local_lin_vel, 
             self.command,
-            self.last_action
+            self.last_action,
+            self.prev_proj_grav,
+            self.prev_lin_vel,
+            self.prev_ang_vel
         ]
+
+        self.prev_proj_grav = proj_grav.copy()
+        self.prev_lin_vel = local_lin_vel.copy()
+        self.prev_ang_vel = local_ang_vel.copy()
 
         return np.concatenate(stats).reshape((1, self.elem_num))
         # return np.concatenate(stats).reshape((1, 12))
@@ -154,7 +153,7 @@ class FlightFullState(BaseRL):
         return trunc
     
 
-    def create_initial_state_(self):
+    def create_initial_state(self):
         state = super().create_initial_state()
         new_pos = np.array([0, 0, 20])
         command = (np.random.rand(4)*2 - 1)*self.alpha
@@ -168,29 +167,30 @@ class FlightFullState(BaseRL):
         print(self.command)
         state.world.pos = new_pos
         return state
-    
 
-    def create_initial_state(self):
+
+    def create_initial_state_old(self):
         state = super().create_initial_state()
         new_pos = np.array([0, 0, 20])
-        command = (np.random.rand(4)*2 - 1)*self.alpha
-        command[0]=0
-        rot = R.from_euler("zxy", command[:3]*180, degrees=True)
-        command[:3] = rot.apply([0, 0, 1])
+        command = np.random.rand(4)
+        command[:2] = (command[:2]*2 - 1)*self.alpha
+        command[2] = command[2]*(1+self.alpha) - self.alpha
 
-        # command[3] *= self.max_vel/(2-self.alpha)
+        # command[3] *= self.drone.max_speed/(2-self.alpha)
+        command[3] = (command[3]*2 - 1)*self.alpha
         command[3] = self.max_vel*(0.5 + 0.5*command[3])
-        self.command = command[:3]*command[3]
-        print(self.command)
+        command[:3] /= np.linalg.norm(command[:3])
+        self.command = command
+        # print(self.command)
         state.world.pos = new_pos
         return state
-
+    
 
     def create_initial_action(self):
         return np.zeros(4)
     
 
-    def reward_(self):
+    def reward(self):
 
         state = deepcopy(self.drone.state)
 
@@ -210,36 +210,9 @@ class FlightFullState(BaseRL):
 
         # reward = (dir_reward + mag_diff)*angles_reward 
         # reward = (dir_reward + mag_sq_diff)*angles_reward 
-        reward = np.exp(-np.sum(((vel-comm[:3]*comm[3])/self.command[3])**2))
-        # reward = (1+dir_reward)*mag_diff
-        # print(mag_sq_diff, mag_diff, flight_mag, self.command[3])
-
-        return reward
-    
-
-    def reward(self):
-
-        state = deepcopy(self.drone.state)
-
-        comm = self.command.copy()
-        vel = state.world.vel
-        flight_mag = np.linalg.norm(vel)
-        comm_mag = np.linalg.norm(comm)
-        flight_dir = vel/flight_mag
-        
-        dir_reward = np.dot(flight_dir, self.command[:3]/comm_mag)
-
-        # mag_abs_diff = np.abs(flight_mag - self.command[3])/self.command[3]
-        # mag_sq_diff = (flight_mag - self.command[3])**2
-        mag_sq_diff = ((flight_mag - comm_mag)/comm_mag)**2
-        mag_diff = np.exp(-mag_sq_diff)
-        self.save_stats(dir_reward.copy(), mag_sq_diff.copy())
-        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)*0.1)
-
-        # reward = (dir_reward + mag_diff)*angles_reward 
-        # reward = (dir_reward + mag_sq_diff)*angles_reward 
-        reward = np.exp(-np.sum(((vel-comm)/comm_mag)**2))
-        # reward = (1+dir_reward)*mag_diff
+        # reward = dir_reward*mag_diff 
+        # reward = np.exp(-np.sum((vel-comm[:3]*comm[3])**2))
+        reward = 0.5*(1+dir_reward)*mag_diff
         # print(mag_sq_diff, mag_diff, flight_mag, self.command[3])
 
         return reward

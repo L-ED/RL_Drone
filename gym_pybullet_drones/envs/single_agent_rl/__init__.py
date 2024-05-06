@@ -4,5 +4,5 @@ from gym_pybullet_drones.envs.single_agent_rl.FlyThruGateAviary import FlyThruGa
 from gym_pybullet_drones.envs.single_agent_rl.AimAviary import AimAviary
 
 from gym_pybullet_drones.envs.single_agent_rl.BaseRL import BaseRL
-from gym_pybullet_drones.envs.single_agent_rl.hover import HoverIMU, HoverGPS, HoverFullState
-from gym_pybullet_drones.envs.single_agent_rl.flight import FlightFullState#, FlightGPS, FlightIMU
+from gym_pybullet_drones.envs.single_agent_rl.hover import HoverIMU, HoverGPS, HoverFullState, HoverFullStateCurriculum
+from gym_pybullet_drones.envs.single_agent_rl.flight import FlightFullState, FlightFullStateBuffer#, FlightGPS, FlightIMU
