@@ -105,15 +105,6 @@ class FlightFullState(BaseRL):
         self.last_action = np.zeros(4)
 
 
-    # def reset(self, seed=None, options=None):
-    #     # action = self.create_initial_action()
-    #     # obs = self.drone.step(action, self)
-    #     obs, inf = super().reset()
-    #     # print('IM HERE')
-    #     return self.preprocess_observation(obs), inf
-
-
-
     def preprocess_observation(self, observation):
 
         pos = observation['FS_0'][0]

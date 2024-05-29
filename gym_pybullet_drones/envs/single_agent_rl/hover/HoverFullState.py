@@ -181,6 +181,21 @@ class HoverFullState(BaseRL):
         return np.zeros(4)
     
 
+    def reset_manual(self, pos):
+        # pb.resetSimulation(physicsClientId=self.client)
+        # self.init_sim()
+        self.step_idx = 0
+        state = self.create_initial_state()
+        # print(state.world.pos)
+        state.world.pos = pos.copy()
+        self.drone.reset_state(state)
+        action = self.create_initial_action()
+        obs = self.drone.step(action, self)
+        # print("DRONE", obs)
+        return self.preprocess_observation(obs), {}
+
+    
+
     def reward(self):
 
         # safe_radius= 0.3

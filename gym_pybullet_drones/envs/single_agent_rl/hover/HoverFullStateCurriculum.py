@@ -38,12 +38,12 @@ class HoverFullStateCurriculum(BaseRL):
         self.max_g = 2*9.8
         self.max_ang_vel = 2 
         # self.max_radius = 1
-        self.max_radius = 4
+        self.max_radius = 2
 
         self.alpha = 0.2
 
         # self.target_pos = np.array([0, 0, 1])
-        self.target_pos = np.array([0, 0, 5])
+        self.target_pos = np.array([0, 0, 3])
         self.last_action = np.zeros(4)
         self.randomize = True
         self.validation = False
@@ -89,7 +89,6 @@ class HoverFullStateCurriculum(BaseRL):
             dtype=np.float32
         )
 
-
     
     def preprocess_action(self, action):
         self.last_action = action.copy()
@@ -98,15 +97,6 @@ class HoverFullStateCurriculum(BaseRL):
 
     def reset_buffers(self):
         self.last_action = np.zeros(4)
-
-
-    # def reset(self, seed=None, options=None):
-    #     # action = self.create_initial_action()
-    #     # obs = self.drone.step(action, self)
-    #     obs, inf = super().reset()
-    #     # print('IM HERE')
-    #     return self.preprocess_observation(obs), inf
-
 
 
     def preprocess_observation(self, observation):
@@ -139,25 +129,6 @@ class HoverFullStateCurriculum(BaseRL):
             self.last_action
         ]
 
-
-        # stats = [
-        #     pos,
-        #     ang,
-        #     world_ang_vel,
-        #     world_lin_vel, 
-        #     # imu[:3],
-        #     # imu[3:],
-        #     # a_acc, 
-        #     # acc,
-        #     targ_disp
-        # ]
-
-        # for i in range(len(stats)):
-        #     value = stats[i]
-        #     value_norm = np.linalg.norm(value)
-        #     if value_norm != 0:
-        #         value = value/value_norm 
-        #     stats[i] = value
 
         return np.concatenate(stats).reshape((1, self.elem_num))
         # return np.concatenate(stats).reshape((1, 12))
@@ -205,7 +176,7 @@ class HoverFullStateCurriculum(BaseRL):
     def create_initial_state(self):
         state = super().create_initial_state()
         if self.randomize:
-            delta = (np.random.rand(3)* - 1)*self.max_radius*self.alpha
+            delta = (np.random.rand(3)*2 - 1)*self.max_radius*self.alpha
             new_pos = self.target_pos + delta
         else:
             new_pos = np.zeros(3)
@@ -246,11 +217,9 @@ class HoverFullStateCurriculum(BaseRL):
             # closenes_reward +=1
             dir_reward=1
 
-        # print(state.world.ang_vel, state.local.ang_vel)
-        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)*0.3) 
+        angles_reward = np.exp(-np.linalg.norm(state.world.ang_vel)*0.1) 
         # print(closenes_reward)
         reward = closenes_reward*angles_reward
-        # reward = closenes_reward + angles_reward + dir_reward*0.1
 
         return reward
 

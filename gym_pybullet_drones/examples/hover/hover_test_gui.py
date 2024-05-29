@@ -13,7 +13,8 @@ def main(test=True):
         savedir,
         # 'PPO_35'
         # 'PPO_39' #best
-        'PPO_43'
+        'PPO_43' #bestb
+        # 'PPO_44'
         # 'curriculum/PPO_2'
     )
     trainer = PPO
@@ -27,8 +28,8 @@ def main(test=True):
     env.randomize = False
     env.validation = True
 
-    x = pb.addUserDebugParameter('x', -1, 10, 0.)
-    y = pb.addUserDebugParameter('y', -1, 10, 0.)
+    x = pb.addUserDebugParameter('x', -10, 10, 0.)
+    y = pb.addUserDebugParameter('y', -10, 10, 0.)
     z = pb.addUserDebugParameter('z', 0.2, 20, 1.)
     reset = pb.addUserDebugParameter('reset', 1, 0, 1)
     
