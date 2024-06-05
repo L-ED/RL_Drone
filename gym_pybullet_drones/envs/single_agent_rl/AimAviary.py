@@ -2,11 +2,13 @@
 import numpy as np
 from gymnasium import spaces
 import pybullet as p
-
+import os 
+from gym_pybullet_drones.envs.BaseAviary import BaseAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType, BaseSingleAgentAviary
+from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 
-class HoverAviary(BaseSingleAgentAviary):
+class AimAviary(BaseAviary):
     """Single agent RL problem: hover at position."""
 
     ################################################################################
@@ -56,33 +58,50 @@ class HoverAviary(BaseSingleAgentAviary):
         ])
         self.IMG_RES = np.array([160, 120])
 
-        super().__init__(drone_model=drone_model,
-                         initial_xyzs=initial_xyzs,
-                         initial_rpys=initial_rpys,
-                         physics=physics,
-                         pyb_freq=pyb_freq,
-                         ctrl_freq=ctrl_freq,
-                         gui=gui,
-                         record=record,
-                         obs=obs,
-                         act=act
-                         )
-
         self.target_pose = np.array([30.5, -2.5, .5])
-        self._addObstacles()
-        self.target_class = 67108867
+        self.targ_cls = 67108867
         
         self.targ_pitch=0
         self.targ_yaw=0
 
         self.h=self.IMG_RES[1]
         self.w=self.IMG_RES[0]
-        self.hfov=60
+        self.hfov=60*np.pi/180
         self.f = self.w/(2*np.tan(self.hfov/2))
-        self.vfov = np.arctan(self.h/(2*self.f))
+        self.vfov = 2*np.arctan(self.h/(2*self.f))
         self.fov=np.array(
             [self.vfov, self.hfov]
         )
+
+        vision_attributes = True
+        self.OBS_TYPE = obs
+        self.ACT_TYPE = act
+        self.EPISODE_LEN_SEC = 10
+        #### Create integrated controllers #########################
+        if act in [ActionType.PID, ActionType.VEL, ActionType.ONE_D_PID]:
+            os.environ['KMP_DUPLICATE_LIB_OK']='True'
+            if drone_model in [DroneModel.CF2X, DroneModel.CF2P]:
+                self.ctrl = DSLPIDControl(drone_model=DroneModel.CF2X)
+            else:
+                print("[ERROR] in BaseSingleAgentAviary.__init()__, no controller is available for the specified drone_model")
+        super().__init__(drone_model=drone_model,
+                         num_drones=1,
+                         initial_xyzs=initial_xyzs,
+                         initial_rpys=initial_rpys,
+                         physics=physics,
+                         pyb_freq=pyb_freq,
+                         ctrl_freq=ctrl_freq,
+                         gui=gui,
+                         record=record, 
+                         obstacles=True, # Add obstacles for RGB observations and/or FlyThruGate
+                         user_debug_gui=False, # Remove of RPM sliders from all single agent learning aviaries
+                         vision_attributes=vision_attributes,
+                         )
+        #### Set a limit on the maximum target speed ###############
+        if act == ActionType.VEL:
+            self.SPEED_LIMIT = 0.03 * self.MAX_SPEED_KMH * (1000/3600)
+
+        self._addObstacles()
     ################################################################################
     
     def _computeReward(self):
@@ -101,32 +120,40 @@ class HoverAviary(BaseSingleAgentAviary):
         vel = state[10:13]
         ang_vel = state[13:16]
 
-        diff = pos - self.target_pose
+        diff = self.target_pose - pos
         targ_dir = diff/np.linalg.norm(diff)
         flight_dir = vel/np.linalg.norm(vel)
+        vel_mag = np.sum(vel**2)**0.5
         flight_cos = np.dot(targ_dir, flight_dir)
-        diff = np.sum(diff**2)
+        diff = np.sum(diff**2)**0.5
 
-        ground_hit = pos[2]<0.4
+        ground_hit = (pos[2]<0.1)*(0.1 - pos[2])
 
-        rot_mtrx = np.array(
-            p.getMatrixFromQuaternion(state[3:7])
-        ).reshape((3,3))
-        cam_vec = np.dot(rot_mtrx, np.array([1, 0, 0]))
-        cam_dir = cam_vec/np.linalg.norm(cam_vec)
-        cam_cos = np.dot(targ_dir, cam_dir)
-        ang_reward = 0 if abs(cam_cos)>np.cos(np.pi/3) else 1
+        # rot_mtrx = np.array(
+        #     p.getMatrixFromQuaternion(state[3:7])
+        # ).reshape((3,3))
+        # cam_vec = np.dot(rot_mtrx, np.array([1, 0, 0]))
+        # cam_dir = cam_vec/np.linalg.norm(cam_vec)
+        # cam_cos = np.dot(targ_dir, cam_dir)
+        # ang_reward = 0 if abs(cam_cos)<np.cos(np.pi/3) else 1
+        rot_vel = np.sum((ang_vel/np.linalg.norm(ang_vel))**2)**0.5
 
-        vel_cos = np.dot(targ_dir, flight_dir)
+        target_hit = (diff<2)*(2 - diff)
 
-        diff = np.sum((diff)**2)
+        aim_err = (((self.targ_pitch - np.pi/9)/self.fov[0])**2 + (self.targ_yaw/self.fov[0])**2)**0.5
 
-        ground_hit = pos[2] < 0.04
+        reward = flight_cos*vel_mag - 50*ground_hit - aim_err*vel_mag - rot_vel + target_hit*100
+        print(
+            "REWARD", reward,
+            # "Dist_reward", diff, 
+            "Flight_reward ", flight_cos*vel_mag,
+            "Aim ", - aim_err*vel_mag,
+            "Ground Hit ", - 50*ground_hit,
+            "Rot vel", - rot_vel,
+            "Target hit", target_hit*100
 
-        # print(reward)
-        # targ_hit_reward = 
-
-        return 100*ang_reward - diff - 1000*ground_hit
+        )
+        return reward
     ################################################################################
     
     def _computeTerminated(self):
@@ -183,14 +210,20 @@ class HoverAviary(BaseSingleAgentAviary):
             A Box() of shape (H,W,4) or (12,) depending on the observation type.
 
         """
-        if self.step_counter%self.IMG_CAPTURE_FREQ == 0: 
-            self.rgb[0], self.dep[0], self.seg[0] = self._getDroneImages(0)
+         
+        self.rgb[0], self.dep[0], self.seg[0] = self._getDroneImages(0)
 
-            shape = np.array(self.seg[0].shape[:2])
-            targ_pixls = np.where(self.seg[0]==self.targ_cls)
-            if len(targ_pixls)>0:
-                targ_center = np.mean(np.where(self.seg[0]==self.targ_cls), axis=1)
-                self.targ_pitch, self.targ_yaw = (targ_center - shape//2)/shape*self.fov
+        shape = np.array(self.seg[0].shape[:2])
+        targ_pixls = np.where(self.seg[0]==self.targ_cls)
+
+        if len(targ_pixls[0])>0:
+            targ_center = np.mean(np.where(self.seg[0]==self.targ_cls), axis=1)
+            self.targ_pitch, self.targ_yaw = (targ_center - shape//2)/shape*self.fov
+        else:
+            # print("FOV is", self.fov)
+            self.targ_pitch, self.targ_yaw = self.fov
+
+        # print(self.targ_pitch, self.targ_yaw)
         
         obs = self._clipAndNormalizeState(self._getDroneStateVector(0))
         ret = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16], self.targ_pitch/self.fov[0]*2, self.targ_yaw/self.fov[1]*2]).reshape(14,)
@@ -342,3 +375,99 @@ class HoverAviary(BaseSingleAgentAviary):
                    p.getQuaternionFromEuler([0,0,0]),
                    physicsClientId=self.CLIENT
                    )
+        
+
+    def _preprocessAction(self,
+                          action
+                          ):
+        """Pre-processes the action passed to `.step()` into motors' RPMs.
+
+        Parameter `action` is processed differenly for each of the different
+        action types: `action` can be of length 1, 3, 4, or 6 and represent 
+        RPMs, desired thrust and torques, the next target position to reach 
+        using PID control, a desired velocity vector, new PID coefficients, etc.
+
+        Parameters
+        ----------
+        action : ndarray
+            The input action for each drone, to be translated into RPMs.
+
+        Returns
+        -------
+        ndarray
+            (4,)-shaped array of ints containing to clipped RPMs
+            commanded to the 4 motors of each drone.
+
+        """
+        if self.ACT_TYPE == ActionType.RPM:
+            return np.array(self.HOVER_RPM * (1+0.05*action))
+        elif self.ACT_TYPE == ActionType.PID:
+            state = self._getDroneStateVector(0)
+            next_pos = self._calculateNextStep(
+                    current_position=state[0:3],
+                    destination=action,
+                    step_size=1,
+                )
+            rpm, _, _ = self.ctrl.computeControl(control_timestep=self.CTRL_TIMESTEP,
+                                                 cur_pos=state[0:3],
+                                                 cur_quat=state[3:7],
+                                                 cur_vel=state[10:13],
+                                                 cur_ang_vel=state[13:16],
+                                                 target_pos=next_pos
+                                                 )
+            return rpm
+        elif self.ACT_TYPE == ActionType.VEL:
+            state = self._getDroneStateVector(0)
+            if np.linalg.norm(action[0:3]) != 0:
+                v_unit_vector = action[0:3] / np.linalg.norm(action[0:3])
+            else:
+                v_unit_vector = np.zeros(3)
+            rpm, _, _ = self.ctrl.computeControl(control_timestep=self.CTRL_TIMESTEP,
+                                                 cur_pos=state[0:3],
+                                                 cur_quat=state[3:7],
+                                                 cur_vel=state[10:13],
+                                                 cur_ang_vel=state[13:16],
+                                                 target_pos=state[0:3], # same as the current position
+                                                 target_rpy=np.array([0,0,state[9]]), # keep current yaw
+                                                 target_vel=self.SPEED_LIMIT * np.abs(action[3]) * v_unit_vector # target the desired velocity vector
+                                                 )
+            return rpm
+        elif self.ACT_TYPE == ActionType.ONE_D_RPM:
+            return np.repeat(self.HOVER_RPM * (1+0.05*action), 4)
+        elif self.ACT_TYPE == ActionType.ONE_D_PID:
+            state = self._getDroneStateVector(0)
+            rpm, _, _ = self.ctrl.computeControl(control_timestep=self.CTRL_TIMESTEP,
+                                                 cur_pos=state[0:3],
+                                                 cur_quat=state[3:7],
+                                                 cur_vel=state[10:13],
+                                                 cur_ang_vel=state[13:16],
+                                                 target_pos=state[0:3]+0.1*np.array([0,0,action[0]])
+                                                 )
+            return rpm
+        else:
+            print("[ERROR] in BaseSingleAgentAviary._preprocessAction()")
+
+
+    def _actionSpace(self):
+        """Returns the action space of the environment.
+
+        Returns
+        -------
+        ndarray
+            A Box() of size 1, 3, 4, or 6 depending on the action type.
+
+        """
+        if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
+            size = 4
+        elif self.ACT_TYPE == ActionType.PID:
+            size = 3
+        elif self.ACT_TYPE in [ActionType.ONE_D_RPM, ActionType.ONE_D_PID]:
+            size = 1
+        else:
+            print("[ERROR] in BaseSingleAgentAviary._actionSpace()")
+            exit()
+        return spaces.Box(low=-1*np.ones(size),
+        # return spaces.Box(low=np.zeros(size),  # Alternative action space, see PR #32
+                          high=np.ones(size),
+                          dtype=np.float32
+                          )

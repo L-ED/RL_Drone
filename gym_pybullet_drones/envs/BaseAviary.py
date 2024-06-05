@@ -497,9 +497,9 @@ class BaseAviary(gym.Env):
         #     p.changeDynamics(self.DRONE_IDS[i], -1, linearDamping=0, angularDamping=0)
         #### Show the frame of reference of the drone, note that ###
         #### It severly slows down the GUI #########################
-        if self.GUI and self.USER_DEBUG:
-            for i in range(self.NUM_DRONES):
-                self._showDroneLocalAxes(i)
+        # if self.GUI and self.USER_DEBUG:
+        for i in range(self.NUM_DRONES):
+            self._showDroneLocalAxes(i)
         #### Disable collisions between drones' and the ground plane
         #### E.g., to start a drone at [0,0,0] #####################
         # for i in range(self.NUM_DRONES):
@@ -596,10 +596,12 @@ class BaseAviary(gym.Env):
             exit()
         rot_mat = np.array(p.getMatrixFromQuaternion(self.quat[nth_drone, :])).reshape(3, 3)
         #### Set target point, camera view and projection matrices #
+        disp = np.array([0, 0, self.L])
         target = np.dot(rot_mat,np.array([1000, 0, 0])) + np.array(self.pos[nth_drone, :])
-        DRONE_CAM_VIEW = p.computeViewMatrix(cameraEyePosition=self.pos[nth_drone, :]+np.array([0, 0, self.L]),
+        DRONE_CAM_VIEW = p.computeViewMatrix(cameraEyePosition=self.pos[nth_drone, :]+np.dot(rot_mat, disp), #+disp,
                                              cameraTargetPosition=target,
-                                             cameraUpVector=[0, 0, 1],
+                                            #  cameraUpVector=[0, 0, 1],
+                                             cameraUpVector=np.dot(rot_mat, np.array([0, 0, 1])),
                                              physicsClientId=self.CLIENT
                                              )
         DRONE_CAM_PRO =  p.computeProjectionMatrixFOV(fov=60.0,

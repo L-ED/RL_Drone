@@ -132,7 +132,7 @@ def run(
     #### Run the simulation ####################################
     action = np.zeros((num_drones,4))
     START = time.time()
-    for i in range(0, int(duration_sec*env.CTRL_FREQ)):
+    for i in range(0, int(duration_sec*env.CTRL_FREQ*10)):
 
         #### Make it rain rubber ducks #############################
         # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
@@ -142,7 +142,9 @@ def run(
 
         #### Compute control for the current way point #############
         for j in range(num_drones):
-            _, _, segm = env._getDroneImages(j)
+            img, _, segm = env._getDroneImages(j)
+
+            myimg = img
 
             state = obs[j]
             # cur_pos=state[0:3],
