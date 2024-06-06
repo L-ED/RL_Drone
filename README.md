@@ -12,19 +12,38 @@ https://github.com/utiasDSL/gym-pybullet-drones.git
 
 <img src="files/imu_flight.gif" alt="imu flight" width="800">
 
-Main contributions:
+## Main contributions
 - **IMU Sensor model** gym_pybullet_drones/devices/sensors/imu.py
 - **Physical drone model** gym_pybullet_drones/assets/custom.urdf
 - **Environment for system learning** gym_pybullet_drones/envs/single_agent_rl/hover
 - Sensor asynchronous clocking
 Added model of physical drone 
 
+### Drone Model
+- Calculated inertia from physical analog using Autodesk Inventor
+- Estimated Lift and Torque coefficients from open [database](https://database.tytorobotics.com/propellers/96z/6045-plastic), duplicated in gym_pybullet_drones/thrust_torque_estimation
 
-IMU sensor model based on two-component noise model
+<img src="files/model.png" alt="imu flight" width="400">
+<img src="files/physical.jpg" alt="imu flight" width="400">
+
+### Environment
+Target displacement clipped by absolute max value equal 1, so system has direction information when displacement greater than 1 and has exact measure when displacement less than 1
+Sigmoid function with out scaling used to convert prediction values to range of motor speed [0, max_speed] 
+Reward function motivates agent fly to center and angular rate reward penalizes keeps policy from extra rotation
 ```math
-measurement(t) = estimation(t) + bias(t) + white_noise
-bias(t) =bias(t-1)+N(1,\sigma_{r}*\sqrt{dt})
-white_noise = N(1,\frac{\sigma_{d}}{\sqrt{dt}})
+reward = closeness*angles \\
+closeness = \frac{||displacement||}{radius_{max}} \\
+angles = exp(||\omega||*0.1) 
+```
+During training drone initialized with random position from uniform distribution in sphere with radius 1.5 meters
+
+
+### IMU sensor 
+measurement simulation based on two-component noise model
+```math
+measurement(t) = estimation(t) + bias(t) + noise \\
+bias(t) =bias(t-1)+N(1,\sigma_{r}*\sqrt{dt})\\
+noise = N(1,\frac{\sigma_{d}}{\sqrt{dt}})
 ```
 
 
