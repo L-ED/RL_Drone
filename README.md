@@ -32,7 +32,11 @@ Sigmoid function with out scaling used to convert prediction values to range of 
 Reward function motivates agent fly to center and angular rate reward penalizes keeps policy from extra rotation
 ```math
 reward = closeness*angles \\
+```
+```math
 closeness = \frac{||displacement||}{radius_{max}} \\
+```
+```math
 angles = exp(||\omega||*0.1) 
 ```
 During training drone initialized with random position from uniform distribution in sphere with radius 1.5 meters
@@ -42,7 +46,11 @@ During training drone initialized with random position from uniform distribution
 measurement simulation based on two-component noise model
 ```math
 measurement(t) = estimation(t) + bias(t) + noise \\
+```
+```math
 bias(t) =bias(t-1)+N(1,\sigma_{r}*\sqrt{dt})\\
+```
+```math
 noise = N(1,\frac{\sigma_{d}}{\sqrt{dt}})
 ```
 
