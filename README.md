@@ -4,10 +4,29 @@ Diploma work based on PyBullet physics simulator. Target of this work is to deve
 - projected gravity [orientation analog]
 - position displacement
 
+This means drone can be operated from integrated imu data without additional velocity postprocessing from local to global coordinates
+
 Also this work contains absolute position controllers from 
 https://github.com/utiasDSL/gym-pybullet-drones.git 
 
-<img src="files/imu_flight.gif" alt="formation flight" width="700">
+
+<img src="files/imu_flight.gif" alt="imu flight" width="800">
+
+Main contributions:
+- **IMU Sensor model** gym_pybullet_drones/devices/sensors/imu.py
+- **Physical drone model** gym_pybullet_drones/assets/custom.urdf
+- **Environment for system learning** gym_pybullet_drones/envs/single_agent_rl/hover
+- Sensor asynchronous clocking
+Added model of physical drone 
+
+
+IMU sensor model based on two-component noise model
+```math
+measurement(t) = estimation(t) + bias(t) + white_noise
+bias(t) =bias(t-1)+N(1,\sigma_{r}*\sqrt{dt})
+white_noise = N(1,\frac{\sigma_{d}}{\sqrt{dt}})
+```
+
 
 ## Installation
 
