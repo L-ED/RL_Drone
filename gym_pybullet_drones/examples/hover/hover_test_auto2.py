@@ -6,6 +6,7 @@ import os
 import pybullet as pb
 from scipy.spatial.transform import Rotation as R
 import numpy as np
+import json
 
 
 def fly_to_point(delta, env, agent, max_timestemp=500):
@@ -16,6 +17,13 @@ def fly_to_point(delta, env, agent, max_timestemp=500):
 
     term = False
     success = False
+    transitions = {
+        'pos':[],
+        'rpy':[],
+        'vel':[],
+        'angvel':[],
+        "motor_speed":[]
+    }
 
     while not term:
 
@@ -27,6 +35,12 @@ def fly_to_point(delta, env, agent, max_timestemp=500):
         )
 
         state, reward, terminated, truncated, info = env.step(action)
+        transitions['pos'].append(env.drone.state.world.pos.copy().tolist())
+        transitions['rpy'].append(env.drone.state.world.rpy.copy().tolist())
+        transitions['vel'].append(env.drone.state.world.vel.copy().tolist())
+        transitions['angvel'].append(env.drone.state.world.ang_vel.copy().tolist())
+        transitions['motor_speed'].append(env.preprocess_action(action).tolist())
+
 
         pos = env.drone.state.world.pos.copy()
         if pos[2]<0.2 or env.step_idx>max_timestemp:
@@ -38,12 +52,13 @@ def fly_to_point(delta, env, agent, max_timestemp=500):
 
         time.sleep(env.timestep)
     
-    return success
+    return success, transitions
 
 
 def main(test=True):
 
-    savedir = '/home/led/robotics/engines/Bullet_sym/gym-pybullet-drones/gym_pybullet_drones/results/hover/multienv/' 
+    data = {}
+    savedir = '/home/led/robotics/engines/Bullet_sym/RL_Drone/gym_pybullet_drones/results/hover/multienv/' 
     savepath= os.path.join(
         savedir,
         # 'PPO_35'
@@ -84,9 +99,19 @@ def main(test=True):
 
     for r in radius:
         sucess_num = 0
+        radius_transition= []
         for point in points*r:
-            sucess_num += fly_to_point(point, env=env, agent=agent)
+            sucess, transition = fly_to_point(point, env=env, agent=agent)
+            sucess_num += sucess
+            radius_transition.append(transition)
+        data[r.item()] = radius_transition
         print("Radius ", r, "success rate", sucess_num/len(points))
+    
+    json_path = os.path.join(
+        savedir, 'data.json'
+    )
+    with open(json_path, 'w') as f:
+        json.dump(data, f)
 
 
 
